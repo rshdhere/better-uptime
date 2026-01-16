@@ -240,6 +240,19 @@ importers:
         specifier: ^5
         version: 5.9.2
 
+  packages/redis:
+    dependencies:
+      typescript:
+        specifier: ^5
+        version: 5.9.2
+    devDependencies:
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../tooling/typescript-config
+      '@types/bun':
+        specifier: latest
+        version: 1.3.6
+
   packages/store:
     dependencies:
       '@neondatabase/serverless':
