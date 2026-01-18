@@ -3,7 +3,6 @@ import { z } from "zod";
 export const userInputValidation = z
   .object({
     email: z
-      .string()
       .email({ message: "email-id should be valid" })
       .min(5, { message: "email should have atleast 05 charachters" })
       .max(40, { message: "email shouldn't have more than 50 charachters" }),
@@ -35,5 +34,14 @@ export const githubAuthInput = z.object({
 // Signup output validation (returns message instead of token)
 export const signupOutputValidation = z.object({
   message: z.string(),
-  email: z.string().email(),
+  email: z.email(),
+});
+
+export const websiteResponse = z.object({
+  message: z.string(),
+  //TODO: needs to be updated when clickhouse is integrated, right now it says website was stored in the database
+});
+
+export const websiteRegisterInputValidation = z.object({
+  url: z.url("Invalid Url"),
 });

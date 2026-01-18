@@ -2,8 +2,7 @@ import { prismaClient } from "@repo/store";
 import jwt from "jsonwebtoken";
 import type { User, Website } from "@repo/store/generated/prisma";
 import { userRouter } from "../routes/user.js";
-// TODO: Uncomment once websiteRouter is implemented
-// import { websiteRouter } from "../routes/website.js";
+import { websiteRouter } from "../routes/website.js";
 import {
   router,
   createContext,
@@ -14,10 +13,9 @@ import type { CreateHTTPContextOptions } from "@trpc/server/adapters/standalone"
 import type { IncomingMessage, ServerResponse } from "http";
 
 // Create the app router with user routes
-// TODO: Add websiteRouter once implemented
 const appRouter = router({
   user: userRouter,
-  // website: websiteRouter,
+  website: websiteRouter,
 });
 
 export type AppRouter = typeof appRouter;
