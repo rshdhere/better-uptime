@@ -8,14 +8,13 @@ import {
   createTestWebsite,
 } from "../helpers.js";
 
-// TODO: Remove .skip once websiteRouter is implemented in src/routes/website.ts
-describe.skip("Website Routes", () => {
+describe("Website Routes", () => {
   describe("createWebsite", () => {
     it("should allow authenticated user to add a URL to monitor", async () => {
       const user = await createTestUser();
       const caller = createAuthenticatedCaller(user.id);
 
-      const result = await caller.website.create({
+      const result = await caller.website.register({
         url: "https://example.com",
         name: "My Example Site",
       });
@@ -38,7 +37,7 @@ describe.skip("Website Routes", () => {
       const user = await createTestUser();
       const caller = createAuthenticatedCaller(user.id);
 
-      const result = await caller.website.create({
+      const result = await caller.website.register({
         url: "https://example.com",
       });
 
@@ -51,7 +50,7 @@ describe.skip("Website Routes", () => {
       const caller = createTestCaller();
 
       try {
-        await caller.website.create({
+        await caller.website.register({
           url: "https://example.com",
         });
         // Should not reach here
@@ -67,7 +66,7 @@ describe.skip("Website Routes", () => {
       const caller = createAuthenticatedCaller(user.id);
 
       await expect(
-        caller.website.create({
+        caller.website.register({
           url: "not-a-valid-url",
         }),
       ).rejects.toThrow();
@@ -78,7 +77,7 @@ describe.skip("Website Routes", () => {
       const caller = createAuthenticatedCaller(user.id);
 
       await expect(
-        caller.website.create({
+        caller.website.register({
           url: "ftp://example.com",
         }),
       ).rejects.toThrow();
