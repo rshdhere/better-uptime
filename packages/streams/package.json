@@ -1,13 +1,21 @@
 {
-  "name": "redis",
-  "module": "index.ts",
+  "name": "@repo/streams",
+  "module": "src/index.ts",
   "type": "module",
   "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/index.ts"
+  },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
     "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@repo/config": "workspace:*",
+    "redis": "^5.10.0"
   }
 }

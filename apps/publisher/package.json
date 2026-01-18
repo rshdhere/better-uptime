@@ -1,8 +1,16 @@
 {
-  "name": "@repo/publisher",
+  "name": "publisher",
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@repo/store": "workspace:*",
+    "@repo/streams": "workspace:*"
+  },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
     "@types/bun": "latest"
