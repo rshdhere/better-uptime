@@ -4,7 +4,12 @@ import type { User, Website } from "@repo/store/generated/prisma";
 import { userRouter } from "../routes/user.js";
 // TODO: Uncomment once websiteRouter is implemented
 // import { websiteRouter } from "../routes/website.js";
-import { router, createContext, JWT_SECRET } from "../trpc.js";
+import {
+  router,
+  createContext,
+  JWT_SECRET,
+  createCallerFactory,
+} from "../trpc.js";
 import type { CreateHTTPContextOptions } from "@trpc/server/adapters/standalone";
 import type { IncomingMessage, ServerResponse } from "http";
 
@@ -16,6 +21,10 @@ const appRouter = router({
 });
 
 export type AppRouter = typeof appRouter;
+
+// Create caller factory for type-safe test callers
+const createCaller = createCallerFactory(appRouter);
+type RouterCaller = ReturnType<typeof createCaller>;
 
 /**
  * Create a test user directly in the database (bypasses email verification flow)
@@ -114,25 +123,29 @@ function createMockHttpContext(authToken?: string): CreateHTTPContextOptions {
     info: {
       isBatchCall: false,
       calls: [],
+      accept: "application/json",
+      type: "query",
+      connectionParams: null,
+      signal: undefined,
     },
-  };
+  } as unknown as CreateHTTPContextOptions;
 }
 
 /**
  * Create a tRPC caller for testing (unauthenticated)
  */
-export function createTestCaller() {
+export function createTestCaller(): RouterCaller {
   const ctx = createContext(createMockHttpContext());
-  return appRouter.createCaller(ctx);
+  return createCaller(ctx);
 }
 
 /**
  * Create an authenticated tRPC caller for testing
  */
-export function createAuthenticatedCaller(userId: string) {
+export function createAuthenticatedCaller(userId: string): RouterCaller {
   const token = generateTestToken(userId);
   const ctx = createContext(createMockHttpContext(token));
-  return appRouter.createCaller(ctx);
+  return createCaller(ctx);
 }
 
 /**
