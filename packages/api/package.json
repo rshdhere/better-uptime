@@ -13,10 +13,16 @@
       "import": "./src/trpc.ts"
     }
   },
+  "scripts": {
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage"
+  },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
     "@types/bun": "latest",
-    "@types/jsonwebtoken": "^9.0.10"
+    "@types/jsonwebtoken": "^9.0.10",
+    "vitest": "^4.0.17"
   },
   "peerDependencies": {
     "typescript": "^5"

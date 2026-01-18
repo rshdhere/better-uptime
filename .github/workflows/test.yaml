@@ -1,0 +1,99 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @repo/store prisma:generate
+
+      - name: Run validators tests
+        run: pnpm --filter @repo/validators test
+
+      - name: Run API tests
+        run: pnpm --filter @repo/api test
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          CLIENT_ID_GITHUB: ${{ secrets.CLIENT_ID_GITHUB }}
+          CLIENT_SECRET_GITHUB: ${{ secrets.CLIENT_SECRET_GITHUB }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run lint
+        run: pnpm lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @repo/store prisma:generate
+
+      - name: Run type check
+        run: pnpm check-types

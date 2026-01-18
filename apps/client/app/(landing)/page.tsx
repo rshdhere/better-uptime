@@ -9,8 +9,14 @@ export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    setIsLoggedIn(!!token);
+    const checkAuthStatus = () => {
+      const token = localStorage.getItem("token");
+      setIsLoggedIn(!!token);
+    };
+
+    checkAuthStatus();
+    window.addEventListener("storage", checkAuthStatus);
+    return () => window.removeEventListener("storage", checkAuthStatus);
   }, []);
 
   const handleLogout = () => {

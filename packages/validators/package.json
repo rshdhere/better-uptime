@@ -5,11 +5,18 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
-    "./user": "./src/user/index.ts"
+    "./user": "./src/user/index.ts",
+    "./website": "./src/website/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "vitest": "^4.0.17"
   },
   "peerDependencies": {
     "typescript": "^5"

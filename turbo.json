@@ -17,6 +17,20 @@
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*", ".env.test*"],
+      "cache": false
+    },
+    "test:watch": {
+      "cache": false,
+      "persistent": true
+    },
+    "test:coverage": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*", ".env.test*"],
+      "outputs": ["coverage/**"]
     }
   }
 }
