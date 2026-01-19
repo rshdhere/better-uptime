@@ -28,6 +28,9 @@ async function publish() {
 }
 
 console.log(`[Publisher] Starting publisher service (interval: 2m)`);
-setInterval(() => {
-  publish();
-}, 2 * 1000);
+setInterval(
+  () => {
+    publish();
+  },
+  2 * 60 * 1000,
+); // push to the stream, every 2 mins

@@ -76,6 +76,13 @@ import { BACKEND_PORT as DEFAULT_BACKEND_PORT } from "./constants.js";
 export const BACKEND_PORT =
   getEnvVar("BACKEND_PORT", false) || String(DEFAULT_BACKEND_PORT);
 
+// Worker
+export const REGION_ID = getEnvVar("REGION_ID");
+export const WORKER_ID = getEnvVar("WORKER_ID");
+
+// Streams
+export const STREAM_NAME = "betteruptime:website";
+
 // Export all env vars as a single object for convenience
 export const env = {
   DATABASE_URL,
@@ -88,4 +95,7 @@ export const env = {
   REDIS_PASSWORD,
   REDIS_HOST,
   REDIS_PORT,
+  REGION_ID,
+  WORKER_ID,
+  STREAM_NAME,
 } as const;
