@@ -2,6 +2,8 @@ import React from "react";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "next-themes";
+import { Navigation } from "@/components/ui/Navbar";
+import Footer from "@/components/ui/Footer";
 import { TRPCProvider } from "./providers";
 import "./globals.css";
 
@@ -23,12 +25,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} antialiased`}>
+      <body
+        className={`${inter.className} min-h-screen scroll-auto antialiased selection:bg-indigo-100 selection:text-indigo-700 bg-background text-foreground dark:bg-gray-950`}
+      >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <TRPCProvider>
-            <main className="bg-background text-foreground min-h-screen">
-              {children}
-            </main>
+            <Navigation />
+            <main className="min-h-screen">{children}</main>
+            <Footer />
           </TRPCProvider>
         </ThemeProvider>
       </body>
