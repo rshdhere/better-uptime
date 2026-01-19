@@ -76,9 +76,9 @@ import { BACKEND_PORT as DEFAULT_BACKEND_PORT } from "./constants.js";
 export const BACKEND_PORT =
   getEnvVar("BACKEND_PORT", false) || String(DEFAULT_BACKEND_PORT);
 
-// Worker
-export const REGION_ID = getEnvVar("REGION_ID");
-export const WORKER_ID = getEnvVar("WORKER_ID");
+// Worker (optional - only required when using worker features)
+export const REGION_ID = getEnvVar("REGION_ID", false) || "";
+export const WORKER_ID = getEnvVar("WORKER_ID", false) || "";
 
 // Streams
 export const STREAM_NAME = "betteruptime:website";

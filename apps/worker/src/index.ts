@@ -2,6 +2,15 @@ import { REGION_ID, WORKER_ID } from "@repo/config";
 import { xAckBulk, xReadGroup } from "@repo/streams";
 import axios from "axios";
 
+// Validate required environment variables
+if (!REGION_ID || !WORKER_ID) {
+  console.error(
+    "[Worker] Missing required environment variables: REGION_ID and WORKER_ID must be set",
+  );
+  // eslint-disable-next-line no-undef
+  process.exit(1);
+}
+
 async function processWebsite(url: string, websiteId: string) {
   const startTime = Date.now();
 
