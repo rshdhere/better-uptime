@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { GITHUB_OAUTH_URL } from "@repo/config/constants";
+import { Button } from "@/components/Button";
 
 function getErrorMessage(error: { message: string }): string {
   try {
@@ -161,10 +162,11 @@ export default function SignupPage() {
         </div>
 
         {/* GitHub OAuth Button */}
-        <button
+        <Button
           type="button"
           onClick={handleGitHubLogin}
-          className="flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700"
+          variant="secondary"
+          className="flex w-full items-center justify-center gap-2"
         >
           <svg
             className="h-5 w-5"
@@ -179,7 +181,7 @@ export default function SignupPage() {
             />
           </svg>
           Continue with GitHub
-        </button>
+        </Button>
 
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
@@ -226,13 +228,9 @@ export default function SignupPage() {
             </p>
           </div>
 
-          <button
-            type="submit"
-            disabled={signup.isPending}
-            className="w-full rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
-          >
+          <Button type="submit" disabled={signup.isPending} className="w-full">
             {signup.isPending ? "Creating account..." : "Sign up"}
-          </button>
+          </Button>
         </form>
 
         <p className="text-center text-sm text-gray-500 dark:text-gray-400">
