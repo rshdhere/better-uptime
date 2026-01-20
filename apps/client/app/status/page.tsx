@@ -52,23 +52,6 @@ export default function StatusPage() {
     }
   }, [statusQuery.error]);
 
-  // While we decide if the user is authed, keep UI minimal to avoid a flash.
-  if (!token) {
-    return (
-      <div className="mx-auto w-full max-w-5xl px-4 pt-28 pb-16">
-        <div className="rounded-2xl border border-border bg-card p-6 text-card-foreground">
-          <div className="text-sm text-muted-foreground">
-            Redirecting to{" "}
-            <Link href="/login" className="underline underline-offset-4">
-              login
-            </Link>
-            …
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const buildStatusBadge = (
     currentStatus:
       | {
@@ -215,6 +198,17 @@ export default function StatusPage() {
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 pt-28 pb-16">
+      {!token ? (
+        <div className="rounded-2xl border border-border bg-card p-6 text-card-foreground">
+          <div className="text-sm text-muted-foreground">
+            Redirecting to{" "}
+            <Link href="/login" className="underline underline-offset-4">
+              login
+            </Link>
+            …
+          </div>
+        </div>
+      ) : null}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">
@@ -232,7 +226,7 @@ export default function StatusPage() {
         </div>
 
         <div className="px-6 py-4">
-          {statusQuery.isLoading ? (
+          {!token ? null : statusQuery.isLoading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : statusQuery.isError ? (
             <p className="text-sm text-muted-foreground">

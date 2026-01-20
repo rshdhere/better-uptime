@@ -13,7 +13,7 @@ import {
 
 import { ChangelogImage } from "@/components/mdx";
 
-type MDXComponents = Record<string, ComponentType<any>>;
+type MDXComponents = Record<string, ComponentType<unknown>>;
 
 const customComponents = {
   h1: H1,
