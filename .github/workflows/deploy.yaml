@@ -1,0 +1,52 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["Tests"]
+    types:
+      - completed
+
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    # Only deploy if Tests workflow succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+
+            APP_DIR="${VPS_APP_DIR:-$HOME/better-uptime}"
+            cd "$APP_DIR"
+
+            echo "Fetching latest code..."
+            git fetch origin
+            git checkout main
+            git pull origin main
+
+            echo "Ensuring pnpm version..."
+            corepack enable
+            corepack prepare pnpm@9 --activate
+
+            echo "Installing dependencies..."
+            pnpm install --frozen-lockfile
+
+            echo "Building application..."
+            pnpm build
+
+            echo "Reloading PM2 processes..."
+            pm2 reload ecosystem.config.cjs
+
+            echo "Deployment completed successfully 🚀"
