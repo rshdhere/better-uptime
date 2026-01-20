@@ -10,8 +10,12 @@ on:
 
 jobs:
   deploy:
-    # Only deploy if Tests workflow succeeded
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # Only deploy if Tests workflow for a push to main succeeded
+    if: >
+      ${{
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main'}}
     runs-on: ubuntu-latest
 
     steps:
@@ -41,15 +45,16 @@ jobs:
               echo "Using corepack to enable pnpm..."
               corepack enable
               corepack prepare pnpm@9 --activate
+            elif command -v pnpm >/dev/null 2>&1; then
+              echo "Found existing pnpm binary."
             else
-              echo "corepack not found; ensuring pnpm via npm..."
+              echo "corepack not found and pnpm not installed; installing pnpm via official installer..."
+              # Install pnpm using the official install script (does not require npm)
+              curl -fsSL https://get.pnpm.io/install.sh | sh -
+              export PATH="$HOME/.local/share/pnpm:$PATH"
               if ! command -v pnpm >/dev/null 2>&1; then
-                if command -v npm >/dev/null 2>&1; then
-                  npm install -g pnpm@9
-                else
-                  echo "Neither corepack nor npm is available; cannot install pnpm."
-                  exit 1
-                fi
+                echo "Failed to install pnpm; please ensure pnpm is available on the server."
+                exit 1
               fi
             fi
 
@@ -62,4 +67,4 @@ jobs:
             echo "Reloading PM2 processes..."
             pm2 reload ecosystem.config.cjs
 
-            echo "Deployment completed successfully 🚀"
+            echo "Deployment completed successfully"
