@@ -35,6 +35,12 @@ jobs:
             APP_DIR="${VPS_APP_DIR:-$HOME/better-uptime}"
             cd "$APP_DIR"
 
+            # Ensure a bash rc file exists so pnpm's standalone binary
+            # (and its installer) don't crash when trying to read/update it
+            if [ ! -f "$HOME/.bashrc" ]; then
+              touch "$HOME/.bashrc"
+            fi
+
             echo "Fetching latest code..."
             git fetch origin
             git checkout main
