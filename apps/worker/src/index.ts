@@ -4,7 +4,6 @@ import {
   type UptimeStatus,
 } from "@repo/clickhouse";
 import { REGION_ID, WORKER_ID } from "@repo/config";
-import { prismaClient } from "@repo/store";
 import { xAckBulk, xReadGroup } from "@repo/streams";
 import axios from "axios";
 import process from "node:process";
@@ -66,33 +65,6 @@ async function checkWebsite(
   };
 }
 
-async function upsertLatestStatuses(events: UptimeEventRecord[]) {
-  if (events.length === 0) return;
-
-  await prismaClient.$transaction(
-    events.map((event) =>
-      prismaClient.websiteStatusLatest.upsert({
-        where: { websiteId: event.websiteId },
-        create: {
-          websiteId: event.websiteId,
-          status: event.status,
-          responseTimeMs: event.responseTimeMs ?? null,
-          httpStatusCode: event.httpStatusCode ?? null,
-          regionId: event.regionId,
-          checkedAt: event.checkedAt,
-        },
-        update: {
-          status: event.status,
-          responseTimeMs: event.responseTimeMs ?? null,
-          httpStatusCode: event.httpStatusCode ?? null,
-          regionId: event.regionId,
-          checkedAt: event.checkedAt,
-        },
-      }),
-    ),
-  );
-}
-
 async function startWorker() {
   console.log(
     `[Worker] Starting worker (region=${String(REGION_ID)}, worker=${String(
@@ -130,18 +102,13 @@ async function startWorker() {
       }
 
       try {
-        try {
-          await upsertLatestStatuses(successful.map((s) => s.event));
-        } catch (error) {
-          console.error("[Worker] Failed to upsert latest statuses", error);
-        }
-
+        // Persist immutable uptime events to ClickHouse (single source of truth)
         await recordUptimeEvents(successful.map((s) => s.event));
         console.log(
           `[Worker] Recorded ${successful.length} uptime check(s) to ClickHouse`,
         );
 
-        // Ack back to the queue only after persistence succeeds
+        // Ack back to the queue only after ClickHouse persistence succeeds
         await xAckBulk({
           consumerGroup: REGION_ID,
           eventIds: successful.map((s) => s.streamId),

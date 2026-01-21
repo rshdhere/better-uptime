@@ -165,6 +165,7 @@ export async function getRecentStatusEvents(
 ): Promise<
   Array<{
     website_id: string;
+    region_id: string;
     status: "UP" | "DOWN";
     checked_at: string;
     response_time_ms: number | null;
@@ -197,6 +198,7 @@ export async function getRecentStatusEvents(
   const query = `
     SELECT 
       website_id,
+      region_id,
       status,
       checked_at,
       response_time_ms,
