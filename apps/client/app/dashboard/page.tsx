@@ -25,17 +25,18 @@ export default function DashboardPage() {
   const router = useRouter();
   const utils = trpc.useUtils();
 
-  const [token, setToken] = useState<string | null>(null);
+  const [token] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("token");
+  });
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
 
   useEffect(() => {
-    const value = localStorage.getItem("token");
-    if (!value) {
+    if (!token) {
       router.replace("/login");
       return;
     }
-    setToken(value);
   }, [router, token]);
 
   const websitesQuery = trpc.website.list.useQuery(undefined, {
