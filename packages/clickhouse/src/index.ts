@@ -225,6 +225,7 @@ export async function getRecentStatusEvents(
 
   const data = (await result.json()) as Array<{
     website_id: string;
+    region_id: string;
     status: "UP" | "DOWN";
     checked_at: string;
     response_time_ms: number | null;
