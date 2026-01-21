@@ -73,6 +73,9 @@ jobs:
             echo "Installing dependencies..."
             pnpm install --frozen-lockfile
 
+            echo "Generating Prisma Client..."
+            pnpm --filter @repo/store prisma:generate
+
             echo "Building application..."
             pnpm build
 
