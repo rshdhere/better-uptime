@@ -70,6 +70,20 @@ jobs:
               fi
             fi
 
+            echo "Ensuring Bun is available..."
+            export BUN_INSTALL="$HOME/.bun"
+            export PATH="$BUN_INSTALL/bin:$PATH"
+            if command -v bun >/dev/null 2>&1; then
+              echo "Found existing Bun binary."
+            else
+              echo "Installing Bun..."
+              curl -fsSL https://bun.sh/install | bash
+              if ! command -v bun >/dev/null 2>&1; then
+                echo "Failed to install Bun; please ensure Bun is available on the server."
+                exit 1
+              fi
+            fi
+
             echo "Installing dependencies..."
             pnpm install --frozen-lockfile
 
