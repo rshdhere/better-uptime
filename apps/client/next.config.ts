@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import createMDX from "@next/mdx";
 import * as dotenv from "dotenv";
 import * as path from "path";
 
@@ -19,10 +18,9 @@ const nextConfig: NextConfig = {
     CLIENT_SECRET_GITHUB: process.env.CLIENT_SECRET_GITHUB,
     NEXT_PUBLIC_GITHUB_CLIENT_ID: process.env.CLIENT_ID_GITHUB,
   },
+  experimental: {
+    mdxRs: true,
+  },
 };
 
-const withMDX = createMDX({
-  // Add markdown plugins here if needed
-});
-
-export default withMDX(nextConfig);
+export default nextConfig;
