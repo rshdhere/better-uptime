@@ -2,7 +2,7 @@
 // No Bun-specific APIs here
 
 export const BACKEND_PORT = 8084;
-export const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
+export const BACKEND_URL = "https://www.uptique-server.raashed.xyz";
 export const FRONTEND_URL = "http://localhost:3000";
 
 // GitHub OAuth URLs
