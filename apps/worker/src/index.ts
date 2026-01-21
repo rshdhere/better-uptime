@@ -35,7 +35,7 @@ async function checkWebsite(
 
     responseTimeMs = Date.now() - startTime;
 
-    if (res.status >= 400) {
+    if (res.status >= 500) {
       status = "DOWN";
     }
   } catch {
