@@ -165,6 +165,7 @@ export const websiteRouter = router({
     .query(async (opts) => {
       const userId = opts.ctx.user.userId;
 
+      // 1. Get websites from Postgres
       const websites = await prismaClient.website.findMany({
         where: {
           userId,
@@ -181,15 +182,8 @@ export const websiteRouter = router({
       // Get website IDs
       const websiteIds = websites.map((w) => w.id);
 
-      // Fetch the latest status snapshot per website from Postgres.
-      const latestStatuses = await prismaClient.websiteStatusLatest.findMany({
-        where: { websiteId: { in: websiteIds } },
-      });
-      const latestByWebsite = new Map(
-        latestStatuses.map((status) => [status.websiteId, status]),
-      );
-
-      // Query ClickHouse for recent status events (last 90 checks per website).
+      // 2. Query ClickHouse for recent status events (last 90 checks per website).
+      // ClickHouse is the source of truth for status data.
       // If ClickHouse is not configured/available, still return the websites with
       // empty statusPoints so the UI can render the collection.
       let statusEvents: Awaited<ReturnType<typeof getRecentStatusEvents>> = [];
@@ -202,22 +196,43 @@ export const websiteRouter = router({
         );
       }
 
-      // Group status events by website ID
+      // 3. Group status events by website ID and extract current status
+      // Events are already ordered by checked_at DESC from ClickHouse,
+      // so the first event per website is the most recent (current status)
       const statusByWebsite = new Map<
         string,
-        Array<{
-          status: "UP" | "DOWN";
-          checkedAt: Date;
-          responseTimeMs: number | null;
-          httpStatusCode: number | null;
-        }>
+        {
+          statusPoints: Array<{
+            status: "UP" | "DOWN";
+            checkedAt: Date;
+            responseTimeMs: number | null;
+            httpStatusCode: number | null;
+          }>;
+          currentStatus: {
+            status: "UP" | "DOWN";
+            checkedAt: Date;
+            responseTimeMs: number | null;
+            httpStatusCode: number | null;
+            regionId: string;
+          } | null;
+        }
       >();
 
       for (const event of statusEvents) {
         if (!statusByWebsite.has(event.website_id)) {
-          statusByWebsite.set(event.website_id, []);
+          // First event for this website is the most recent (current status)
+          statusByWebsite.set(event.website_id, {
+            statusPoints: [],
+            currentStatus: {
+              status: event.status,
+              checkedAt: new Date(event.checked_at),
+              responseTimeMs: event.response_time_ms,
+              httpStatusCode: event.http_status_code,
+              regionId: event.region_id,
+            },
+          });
         }
-        statusByWebsite.get(event.website_id)!.push({
+        statusByWebsite.get(event.website_id)!.statusPoints.push({
           status: event.status,
           checkedAt: new Date(event.checked_at),
           responseTimeMs: event.response_time_ms,
@@ -226,21 +241,16 @@ export const websiteRouter = router({
       }
 
       // Build the response
-      const websitesWithStatus = websites.map((website) => ({
-        websiteId: website.id,
-        websiteName: website.name,
-        websiteUrl: website.url,
-        statusPoints: statusByWebsite.get(website.id) || [],
-        currentStatus: latestByWebsite.has(website.id)
-          ? {
-              status: latestByWebsite.get(website.id)!.status,
-              checkedAt: latestByWebsite.get(website.id)!.checkedAt,
-              responseTimeMs: latestByWebsite.get(website.id)!.responseTimeMs,
-              httpStatusCode: latestByWebsite.get(website.id)!.httpStatusCode,
-              regionId: latestByWebsite.get(website.id)!.regionId,
-            }
-          : null,
-      }));
+      const websitesWithStatus = websites.map((website) => {
+        const statusData = statusByWebsite.get(website.id);
+        return {
+          websiteId: website.id,
+          websiteName: website.name,
+          websiteUrl: website.url,
+          statusPoints: statusData?.statusPoints || [],
+          currentStatus: statusData?.currentStatus || null,
+        };
+      });
 
       return { websites: websitesWithStatus };
     }),
