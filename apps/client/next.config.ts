@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import createMDX from "@next/mdx";
 import * as dotenv from "dotenv";
 import * as path from "path";
 
@@ -8,6 +9,8 @@ dotenv.config({
 });
 
 const nextConfig: NextConfig = {
+  // Enable MDX pages
+  pageExtensions: ["js", "jsx", "md", "mdx", "ts", "tsx"],
   // Expose env vars from the shared config package
   env: {
     DATABASE_URL: process.env.DATABASE_URL,
@@ -18,4 +21,8 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const withMDX = createMDX({
+  // Add markdown plugins here if needed
+});
+
+export default withMDX(nextConfig);

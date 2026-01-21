@@ -13,6 +13,8 @@
     "@heroui/system": "^2.4.25",
     "@heroui/theme": "^2.4.25",
     "@heroui/toast": "^2.0.19",
+    "@mdx-js/react": "^3.1.1",
+    "@next/mdx": "^16.1.4",
     "@prisma/adapter-neon": "^7.2.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-hover-card": "^1.1.15",
