@@ -15,7 +15,8 @@ jobs:
       ${{
         github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_branch == 'main'}}
+        github.event.workflow_run.head_branch == 'main' }}
+
     runs-on: ubuntu-latest
 
     steps:
@@ -31,69 +32,61 @@ jobs:
           port: ${{ secrets.VPS_PORT }}
           script: |
             set -e
+            set -o pipefail
 
             APP_DIR="${VPS_APP_DIR:-$HOME/better-uptime}"
             cd "$APP_DIR"
 
-            # ---- Load NVM so Node is available for pnpm / PM2 ----
+            # ---------- Load Node / NVM ----------
             export NVM_DIR="$HOME/.nvm"
             if [ -s "$NVM_DIR/nvm.sh" ]; then
               . "$NVM_DIR/nvm.sh"
             fi
 
-            # Ensure a bash rc file exists so pnpm's standalone binary
-            # (and its installer) don't crash when trying to read/update it
-            if [ ! -f "$HOME/.bashrc" ]; then
-              touch "$HOME/.bashrc"
-            fi
+            # Ensure bashrc exists (pnpm installer expects it)
+            [ -f "$HOME/.bashrc" ] || touch "$HOME/.bashrc"
 
             echo "Fetching latest code..."
             git fetch origin
             git checkout main
             git pull origin main
 
+            # ---------- pnpm ----------
             echo "Ensuring pnpm is available..."
             if command -v corepack >/dev/null 2>&1; then
-              echo "Using corepack to enable pnpm..."
               corepack enable
               corepack prepare pnpm@9 --activate
-            elif command -v pnpm >/dev/null 2>&1; then
-              echo "Found existing pnpm binary."
-            else
-              echo "corepack not found and pnpm not installed; installing pnpm via official installer..."
-              # Install pnpm using the official install script (does not require npm)
+            elif ! command -v pnpm >/dev/null 2>&1; then
               curl -fsSL https://get.pnpm.io/install.sh | sh -
               export PATH="$HOME/.local/share/pnpm:$PATH"
-              if ! command -v pnpm >/dev/null 2>&1; then
-                echo "Failed to install pnpm; please ensure pnpm is available on the server."
-                exit 1
-              fi
             fi
 
+            # ---------- Bun ----------
             echo "Ensuring Bun is available..."
             export BUN_INSTALL="$HOME/.bun"
             export PATH="$BUN_INSTALL/bin:$PATH"
-            if command -v bun >/dev/null 2>&1; then
-              echo "Found existing Bun binary."
-            else
-              echo "Installing Bun..."
+            if ! command -v bun >/dev/null 2>&1; then
               curl -fsSL https://bun.sh/install | bash
-              if ! command -v bun >/dev/null 2>&1; then
-                echo "Failed to install Bun; please ensure Bun is available on the server."
-                exit 1
-              fi
             fi
 
+            # ---------- Install ----------
             echo "Installing dependencies..."
             pnpm install --frozen-lockfile
+
+            # ---------- Prisma ----------
+            echo "Running Prisma migrations..."
+            pnpm --filter @repo/store prisma:deploy
 
             echo "Generating Prisma Client..."
             pnpm --filter @repo/store prisma:generate
 
+            # ---------- Build ----------
             echo "Building application..."
             pnpm build
 
+            # ---------- PM2 ----------
             echo "Reloading PM2 processes..."
-            pm2 reload ecosystem.config.cjs
+            pm2 reload ecosystem.config.cjs || pm2 start ecosystem.config.cjs
+            pm2 save
 
             echo "Deployment completed successfully"
