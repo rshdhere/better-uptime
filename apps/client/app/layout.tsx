@@ -4,7 +4,6 @@ import { Inter } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Navigation } from "@/components/ui/Navbar";
 import Footer from "@/components/ui/Footer";
-import { TRPCProvider } from "./providers";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -29,11 +28,9 @@ export default function RootLayout({
         className={`${inter.className} min-h-screen scroll-auto antialiased selection:bg-indigo-100 selection:text-indigo-700 bg-background text-foreground dark:bg-gray-950`}
       >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <TRPCProvider>
-            <Navigation />
-            <main className="min-h-screen">{children}</main>
-            <Footer />
-          </TRPCProvider>
+          <Navigation />
+          <main className="min-h-screen">{children}</main>
+          <Footer />
         </ThemeProvider>
       </body>
     </html>

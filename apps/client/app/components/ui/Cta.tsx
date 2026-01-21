@@ -11,22 +11,10 @@ export default function Cta() {
     >
       <div className="relative flex items-center justify-center">
         <div
-          className="mask pointer-events-none absolute -z-10 select-none opacity-70"
+          className="pointer-events-none absolute inset-0 -z-10 select-none opacity-70"
           aria-hidden="true"
         >
-          <div className="flex size-full flex-col gap-2">
-            {Array.from({ length: 20 }, (_, idx) => (
-              <div key={`outer-${idx}`}>
-                <div className="flex size-full gap-2">
-                  {Array.from({ length: 41 }, (_, idx2) => (
-                    <div key={`inner-${idx}-${idx2}`}>
-                      <div className="size-5 rounded-md shadow shadow-indigo-500/20 ring-1 ring-black/5 dark:shadow-indigo-500/20 dark:ring-white/5"></div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+          <div className="h-full w-full rounded-3xl bg-[radial-gradient(circle_at_0_0,theme(colors.indigo.500/25),transparent_55%),radial-gradient(circle_at_100%_0,theme(colors.indigo.400/20),transparent_55%),radial-gradient(circle_at_0_100%,theme(colors.indigo.500/18),transparent_55%),radial-gradient(circle_at_100%_100%,theme(colors.indigo.400/18),transparent_55%)]" />
         </div>
         <div className="max-w-4xl">
           <div className="flex flex-col items-center justify-center text-center">
