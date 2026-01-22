@@ -26,9 +26,8 @@ module.exports = {
       name: "uptique-server-production",
       cwd: "./apps/server",
       script: "/root/.bun/bin/bun",
-      args: "src/bin.ts",
+      args: "run src/bin.ts",
       interpreter: "none",
-      exec_mode: "fork",
       env: {
         NODE_ENV: "production",
         PORT: "8084",
@@ -38,16 +37,15 @@ module.exports = {
 
     /**
      * =========================
-     * Worker (Redis → HTTP → ClickHouse)
+     * Worker (Bun)
      * =========================
      */
     {
       name: "uptique-worker-production",
       cwd: "./apps/worker",
       script: "/root/.bun/bin/bun",
-      args: "src/index.ts",
+      args: "run src/index.ts",
       interpreter: "none",
-      exec_mode: "fork",
       env: {
         NODE_ENV: "production",
       },
@@ -56,16 +54,15 @@ module.exports = {
 
     /**
      * =========================
-     * Publisher (Scheduler → Redis)
+     * Publisher (Bun)
      * =========================
      */
     {
       name: "uptique-publisher-production",
       cwd: "./apps/publisher",
       script: "/root/.bun/bin/bun",
-      args: "src/index.ts",
+      args: "run src/index.ts",
       interpreter: "none",
-      exec_mode: "fork",
       env: {
         NODE_ENV: "production",
       },
