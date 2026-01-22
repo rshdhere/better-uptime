@@ -43,7 +43,10 @@ function BreadcrumbLink({
   return (
     <Comp
       data-slot="breadcrumb-link"
-      className={cx("hover:text-foreground transition-colors", className)}
+      className={cx(
+        "text-foreground/70 hover:text-foreground transition-colors",
+        className,
+      )}
       {...props}
     />
   );
@@ -72,7 +75,7 @@ function BreadcrumbSeparator({
       data-slot="breadcrumb-separator"
       role="presentation"
       aria-hidden="true"
-      className={cx("[&>svg]:size-3.5", className)}
+      className={cx("[&>svg]:size-3.5 text-foreground/50", className)}
       {...props}
     >
       {children ?? <ChevronRight />}
