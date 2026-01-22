@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cx } from "@/lib/utils";
-import { Settings, CreditCard, FileText, LogOut, User } from "lucide-react";
+import { Settings, LogOut, User } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,22 +13,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/DropdownMenu";
-import { Gemini } from "@/components/icons/Gemini";
 
 interface Profile {
   name: string;
   email: string;
   avatar?: string;
-  subscription?: string;
-  model?: string;
 }
 
 interface MenuItem {
   label: string;
-  value?: string;
   href: string;
   icon: React.ReactNode;
-  external?: boolean;
 }
 
 interface ProfileDropdownProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -50,27 +45,9 @@ export default function ProfileDropdown({
       icon: <User className="w-4 h-4" />,
     },
     {
-      label: "Model",
-      value: data.model,
-      href: "#",
-      icon: <Gemini className="w-4 h-4" />,
-    },
-    {
-      label: "Subscription",
-      value: data.subscription,
-      href: "#",
-      icon: <CreditCard className="w-4 h-4" />,
-    },
-    {
       label: "Settings",
       href: "#",
       icon: <Settings className="w-4 h-4" />,
-    },
-    {
-      label: "Terms & Policies",
-      href: "#",
-      icon: <FileText className="w-4 h-4" />,
-      external: true,
     },
   ];
 
@@ -96,7 +73,7 @@ export default function ProfileDropdown({
             <button
               type="button"
               className={cx(
-                "flex items-center gap-16 p-3 rounded-2xl",
+                "flex items-center gap-16 p-3 rounded-2xl cursor-pointer",
                 "bg-card border border-border",
                 "hover:border-muted-foreground/30 hover:bg-accent/50",
                 "hover:shadow-sm transition-all duration-200 focus:outline-none",
@@ -169,33 +146,17 @@ export default function ProfileDropdown({
                   <Link
                     href={item.href}
                     className={cx(
-                      "flex items-center p-3 rounded-xl transition-all duration-200 cursor-pointer group/item",
+                      "flex items-center gap-2 p-3 rounded-xl transition-all duration-200 cursor-pointer group/item",
                       "hover:shadow-sm border border-transparent",
                       "hover:border-border/50",
                     )}
                   >
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="text-muted-foreground group-hover/item:text-foreground transition-colors">
-                        {item.icon}
-                      </span>
-                      <span className="text-sm font-medium text-foreground tracking-tight leading-tight whitespace-nowrap group-hover/item:text-foreground transition-colors">
-                        {item.label}
-                      </span>
-                    </div>
-                    <div className="shrink-0 ml-auto">
-                      {item.value && (
-                        <span
-                          className={cx(
-                            "text-xs font-medium rounded-md py-1 px-2 tracking-tight",
-                            item.label === "Model"
-                              ? "text-indigo-600 bg-indigo-500/10 dark:text-indigo-400 dark:bg-indigo-500/10 border border-indigo-500/20"
-                              : "text-purple-600 bg-purple-500/10 dark:text-purple-400 dark:bg-purple-500/10 border border-purple-500/20",
-                          )}
-                        >
-                          {item.value}
-                        </span>
-                      )}
-                    </div>
+                    <span className="text-muted-foreground group-hover/item:text-foreground transition-colors">
+                      {item.icon}
+                    </span>
+                    <span className="text-sm font-medium text-foreground tracking-tight leading-tight whitespace-nowrap group-hover/item:text-foreground transition-colors">
+                      {item.label}
+                    </span>
                   </Link>
                 </DropdownMenuItem>
               ))}
