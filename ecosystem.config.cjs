@@ -14,25 +14,23 @@ module.exports = {
       env: {
         NODE_ENV: "production",
       },
-      max_memory_restart: "400M",
     },
 
     /**
      * =========================
-     * API Server (tRPC – Bun)
+     * API Server (Bun + tRPC)
      * =========================
      */
     {
       name: "uptique-server-production",
       cwd: "./apps/server",
       script: "/root/.bun/bin/bun",
-      args: "run ./src/bin.ts",
+      args: "run start",
       interpreter: "none",
       env: {
         NODE_ENV: "production",
         PORT: "8084",
       },
-      max_memory_restart: "400M",
     },
 
     /**
@@ -44,12 +42,11 @@ module.exports = {
       name: "uptique-worker-production",
       cwd: "./apps/worker",
       script: "/root/.bun/bin/bun",
-      args: "run ./src/index.ts",
+      args: "run start",
       interpreter: "none",
       env: {
         NODE_ENV: "production",
       },
-      max_memory_restart: "400M",
     },
 
     /**
@@ -61,12 +58,11 @@ module.exports = {
       name: "uptique-publisher-production",
       cwd: "./apps/publisher",
       script: "/root/.bun/bin/bun",
-      args: "run ./src/index.ts",
+      args: "run start",
       interpreter: "none",
       env: {
         NODE_ENV: "production",
       },
-      max_memory_restart: "300M",
     },
   ],
 };
