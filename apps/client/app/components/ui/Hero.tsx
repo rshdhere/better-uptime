@@ -1,6 +1,9 @@
+"use client";
+
 import { RiPlayCircleFill } from "@remixicon/react";
 import { Instrument_Serif } from "next/font/google";
 import Link from "next/link";
+import React from "react";
 import { Button } from "../Button";
 import HeroImage from "./HeroImage";
 
@@ -10,6 +13,28 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export default function Hero() {
+  const [isLoggedIn, setIsLoggedIn] = React.useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return !!localStorage.getItem("token");
+  });
+
+  React.useEffect(() => {
+    const checkAuth = () => {
+      setIsLoggedIn(!!localStorage.getItem("token"));
+    };
+
+    checkAuth();
+    window.addEventListener("auth-change", checkAuth);
+    window.addEventListener("storage", checkAuth);
+    window.addEventListener("focus", checkAuth);
+
+    return () => {
+      window.removeEventListener("auth-change", checkAuth);
+      window.removeEventListener("storage", checkAuth);
+      window.removeEventListener("focus", checkAuth);
+    };
+  }, []);
+
   return (
     <section
       aria-labelledby="hero-title"
@@ -36,7 +61,9 @@ export default function Hero() {
         style={{ animationDuration: "1100ms" }}
       >
         <Button className="h-10 font-semibold" asChild>
-          <Link href="/signup">Sign up for free</Link>
+          <Link href={isLoggedIn ? "/dashboard" : "/signup"}>
+            {isLoggedIn ? "Visit status now" : "Sign up for free"}
+          </Link>
         </Button>
         <Button
           asChild
