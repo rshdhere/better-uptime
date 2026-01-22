@@ -121,3 +121,20 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Diagonal striped border pattern */
+.diagonal-stripes {
+  --stripe-color: oklch(0.3 0 0 / 40%);
+  --stripe-bg: transparent;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--stripe-bg),
+    var(--stripe-bg) 8px,
+    var(--stripe-color) 8px,
+    var(--stripe-color) 9px
+  );
+}
+
+.dark .diagonal-stripes {
+  --stripe-color: oklch(0.4 0 0 / 50%);
+}
