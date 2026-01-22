@@ -124,17 +124,17 @@
 
 /* Diagonal striped border pattern */
 .diagonal-stripes {
-  --stripe-color: oklch(0.3 0 0 / 40%);
+  --stripe-color: oklch(0.3 0 0 / 30%);
   --stripe-bg: transparent;
   background: repeating-linear-gradient(
     -45deg,
     var(--stripe-bg),
-    var(--stripe-bg) 8px,
-    var(--stripe-color) 8px,
-    var(--stripe-color) 9px
+    var(--stripe-bg) 6px,
+    var(--stripe-color) 6px,
+    var(--stripe-color) 7px
   );
 }
 
 .dark .diagonal-stripes {
-  --stripe-color: oklch(0.4 0 0 / 50%);
+  --stripe-color: oklch(0.45 0 0 / 40%);
 }

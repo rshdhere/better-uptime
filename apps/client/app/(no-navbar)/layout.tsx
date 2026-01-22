@@ -7,17 +7,21 @@ export default function NoNavbarLayout({
 }) {
   return (
     <>
-      {/* Left diagonal stripe border */}
-      <div
-        className="diagonal-stripes pointer-events-none fixed top-0 left-0 z-10 hidden h-full w-24 lg:block"
-        aria-hidden="true"
-      />
-      {/* Right diagonal stripe border */}
-      <div
-        className="diagonal-stripes pointer-events-none fixed top-0 right-0 z-10 hidden h-full w-24 lg:block"
-        aria-hidden="true"
-      />
-      <main className="min-h-screen">{children}</main>
+      <main className="relative min-h-screen">
+        {/* Stripe borders container - centered with content */}
+        <div
+          className="pointer-events-none absolute inset-0 hidden justify-center lg:flex"
+          aria-hidden="true"
+        >
+          <div className="flex w-full max-w-5xl">
+            {/* Left diagonal stripe border */}
+            <div className="diagonal-stripes absolute -left-4 h-full w-3 -translate-x-full" />
+            {/* Right diagonal stripe border */}
+            <div className="diagonal-stripes absolute -right-4 h-full w-3 translate-x-full" />
+          </div>
+        </div>
+        {children}
+      </main>
       <Footer />
     </>
   );
