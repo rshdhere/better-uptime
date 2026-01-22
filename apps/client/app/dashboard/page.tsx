@@ -4,11 +4,23 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { Trash2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Label } from "@/components/Label";
 import { ProfileDropdown } from "@/components/ProfileDropdown";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/AlertDialog";
 
 function getErrorMessage(error: { message: string }): string {
   try {
@@ -73,7 +85,26 @@ export default function DashboardPage() {
     },
   });
 
+  const deleteWebsite = trpc.website.delete.useMutation({
+    onSuccess: async () => {
+      toast.success("Website deleted", {
+        description: "The website has been removed from monitoring.",
+      });
+      // Invalidate both queries to ensure consistency across pages
+      await Promise.all([
+        utils.website.list.invalidate(),
+        utils.website.status.invalidate(),
+      ]);
+    },
+    onError: (err) => {
+      toast.error("Couldn't delete website", {
+        description: getErrorMessage(err),
+      });
+    },
+  });
+
   const isSubmitting = registerWebsite.isPending;
+  const isDeleting = deleteWebsite.isPending;
   const websites = websitesQuery.data?.websites ?? [];
 
   const dashboardTitle = useMemo(() => {
@@ -196,7 +227,7 @@ export default function DashboardPage() {
           ) : (
             <ul className="divide-y divide-border">
               {websites.map((w) => (
-                <li key={w.id} className="flex flex-col gap-1 py-4 sm:flex-row">
+                <li key={w.id} className="flex items-center gap-4 py-4">
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">
                       {w.name || w.url}
@@ -210,8 +241,43 @@ export default function DashboardPage() {
                       {w.url}
                     </a>
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    {w.isActive ? "Active" : "Paused"}
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm text-muted-foreground">
+                      {w.isActive ? "Active" : "Paused"}
+                    </div>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={isDeleting}
+                          className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+                          aria-label={`Delete ${w.name || w.url}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete website?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete{" "}
+                            <span className="font-medium text-foreground">
+                              {w.name || w.url}
+                            </span>
+                            ? This action cannot be undone and all monitoring
+                            data will be removed.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => deleteWebsite.mutate({ id: w.id })}
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </li>
               ))}
