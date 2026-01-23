@@ -83,21 +83,9 @@ export function Navigation() {
             <div className="flex items-center gap-10 font-medium">
               <Link
                 className="px-2 py-1 text-gray-900 dark:text-gray-50"
-                href={siteConfig.baseLinks.about}
-              >
-                About
-              </Link>
-              <Link
-                className="px-2 py-1 text-gray-900 dark:text-gray-50"
                 href={siteConfig.baseLinks.pricing}
               >
                 Pricing
-              </Link>
-              <Link
-                className="px-2 py-1 text-gray-900 dark:text-gray-50"
-                href={siteConfig.baseLinks.changelog}
-              >
-                Changelog
               </Link>
             </div>
           </nav>
@@ -129,13 +117,7 @@ export function Navigation() {
         >
           <ul className="space-y-4 font-medium">
             <li onClick={() => setOpen(false)}>
-              <Link href={siteConfig.baseLinks.about}>About</Link>
-            </li>
-            <li onClick={() => setOpen(false)}>
               <Link href={siteConfig.baseLinks.pricing}>Pricing</Link>
-            </li>
-            <li onClick={() => setOpen(false)}>
-              <Link href={siteConfig.baseLinks.changelog}>Changelog</Link>
             </li>
           </ul>
         </nav>
