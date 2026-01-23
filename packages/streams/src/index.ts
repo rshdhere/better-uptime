@@ -45,6 +45,20 @@ type MessageType = {
   };
 };
 
+export interface AutoClaimOptions {
+  consumerGroup: string;
+  workerId: string;
+  /**
+   * Minimum idle time in milliseconds before a pending message is considered
+   * stale enough to be auto-claimed by a different consumer.
+   */
+  minIdleMs: number;
+  /**
+   * Maximum number of messages to claim in a single batch.
+   */
+  count: number;
+}
+
 const redisClient = createClient({
   username: REDIS_USERNAME,
   password: REDIS_PASSWORD,
@@ -77,9 +91,23 @@ async function xAdd({ url, id }: WebsiteEvent) {
 
 export async function xAddBulk(websites: WebsiteEvent[]) {
   // #region agent log
-  console.log(
-    `[DEBUG:xAddBulk] Entry - websiteCount=${websites.length}, streamName=${STREAM_NAME}, websiteIds=${JSON.stringify(websites.map((w) => w.id))}`,
-  );
+  fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sessionId: "debug-session",
+      runId: "run1",
+      hypothesisId: "E",
+      location: "packages/streams/src/index.ts:xAddBulk:entry",
+      message: "xAddBulk called",
+      data: {
+        streamName: STREAM_NAME,
+        websiteCount: websites.length,
+        websiteIds: websites.slice(0, 50).map((w) => w.id),
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
   // #endregion
 
   // Avoid unbounded Promise.all fan-out (can freeze machines with large website counts).
@@ -97,9 +125,24 @@ export async function xAddBulk(websites: WebsiteEvent[]) {
       throw new Error("Redis MULTI exec returned null (disconnected?)");
     }
     // #region agent log
-    console.log(
-      `[DEBUG:xAddBulk] Batch done - batchIndex=${i}, batchSize=${batch.length}, streamIds=${JSON.stringify(res)}`,
-    );
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "E",
+        location: "packages/streams/src/index.ts:xAddBulk:batchDone",
+        message: "xAddBulk batch published",
+        data: {
+          streamName: STREAM_NAME,
+          batchIndex: i,
+          batchSize: batch.length,
+          resIsNull: res === null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
     // #endregion
   }
 }
@@ -109,9 +152,23 @@ export async function xReadGroup(
 ): Promise<MessageType[]> {
   try {
     // #region agent log
-    console.log(
-      `[DEBUG:xReadGroup] Entry - consumerGroup=${options.consumerGroup}, workerId=${options.workerId}, streamName=${STREAM_NAME}`,
-    );
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "A,B,C,E",
+        location: "packages/streams/src/index.ts:xReadGroup:entry",
+        message: "xReadGroup called",
+        data: {
+          streamName: STREAM_NAME,
+          consumerGroup: options.consumerGroup,
+          workerId: options.workerId,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
     // #endregion
 
     const response = (await client.xReadGroup(
@@ -130,16 +187,44 @@ export async function xReadGroup(
     )) as StreamReadResponse[];
 
     // #region agent log
-    console.log(
-      `[DEBUG:xReadGroup] Raw response - exists=${!!response}, length=${response?.length}, firstStreamMsgCount=${response?.[0]?.messages?.length}, raw=${JSON.stringify(response)?.slice(0, 500)}`,
-    );
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "A,C,D",
+        location: "packages/streams/src/index.ts:xReadGroup:afterRead",
+        message: "xReadGroup returned",
+        data: {
+          streamName: STREAM_NAME,
+          responseExists: !!response,
+          responseLength: response?.length,
+          firstStreamMessages: response?.[0]?.messages?.length,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
     // #endregion
 
     if (!response || response.length === 0 || !response[0]?.messages) {
       // #region agent log
-      console.log(
-        `[DEBUG:xReadGroup] Empty response - response=${JSON.stringify(response)}`,
-      );
+      fetch(
+        "http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "debug-session",
+            runId: "run1",
+            hypothesisId: "A,C",
+            location: "packages/streams/src/index.ts:xReadGroup:empty",
+            message: "xReadGroup empty response",
+            data: { streamName: STREAM_NAME, responseType: typeof response },
+            timestamp: Date.now(),
+          }),
+        },
+      ).catch(() => {});
       // #endregion
       return [];
     }
@@ -159,19 +244,309 @@ export async function xReadGroup(
       }));
 
     // #region agent log
-    console.log(
-      `[DEBUG:xReadGroup] Processed - rawCount=${rawMessages.length}, filteredCount=${messages.length}, filteredOut=${rawMessages.length - messages.length}, messageIds=${JSON.stringify(messages.map((m) => m.event.id))}`,
-    );
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "D",
+        location: "packages/streams/src/index.ts:xReadGroup:processed",
+        message: "xReadGroup processed messages",
+        data: {
+          streamName: STREAM_NAME,
+          rawCount: rawMessages.length,
+          filteredCount: messages.length,
+          filteredOut: rawMessages.length - messages.length,
+          messageIds: messages.map((m) => m.event.id),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
     // #endregion
 
     return messages;
   } catch (error) {
     // #region agent log
-    console.log(
-      `[DEBUG:xReadGroup] ERROR - ${String(error)}, name=${(error as Error)?.name}, message=${(error as Error)?.message}`,
-    );
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "B,C",
+        location: "packages/streams/src/index.ts:xReadGroup:error",
+        message: "xReadGroup threw",
+        data: {
+          streamName: STREAM_NAME,
+          errorName: (error as Error)?.name,
+          errorMessage: (error as Error)?.message,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
     // #endregion
     console.error("Error reading from stream:", error);
+    return [];
+  }
+}
+
+// Read *pending* (already-delivered but unacked) messages for a specific
+// consumer in a group. Note: in Redis, pending messages are *owned* by the
+// consumer that first saw them. If that consumer is gone, we must use
+// XAUTOCLAIM instead (see xAutoClaimStale below).
+export async function xReadGroupPending(
+  options: ReadGroupOptions,
+): Promise<MessageType[]> {
+  try {
+    // #region agent log
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "A",
+        location: "packages/streams/src/index.ts:xReadGroupPending:entry",
+        message: "xReadGroupPending called",
+        data: {
+          streamName: STREAM_NAME,
+          consumerGroup: options.consumerGroup,
+          workerId: options.workerId,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
+    const response = (await client.xReadGroup(
+      options.consumerGroup,
+      options.workerId,
+      {
+        key: STREAM_NAME,
+        // "0" means: start from the beginning of the pending entries list
+        // (already-delivered but unacked messages).
+        id: "0",
+      },
+      {
+        COUNT: 50,
+        BLOCK: 0,
+      },
+    )) as StreamReadResponse[] | null;
+
+    // #region agent log
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "A",
+        location: "packages/streams/src/index.ts:xReadGroupPending:afterRead",
+        message: "xReadGroupPending returned",
+        data: {
+          streamName: STREAM_NAME,
+          responseExists: !!response,
+          responseLength: response?.length ?? 0,
+          firstStreamMessages: response?.[0]?.messages?.length ?? 0,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
+    if (!response || response.length === 0 || !response[0]?.messages) {
+      return [];
+    }
+
+    const rawMessages = response[0].messages;
+    const messages: MessageType[] = rawMessages
+      .filter(
+        (streamMessage: StreamMessage) =>
+          streamMessage.message.url && streamMessage.message.id,
+      )
+      .map((streamMessage: StreamMessage) => ({
+        id: streamMessage.id,
+        event: {
+          url: streamMessage.message.url as string,
+          id: streamMessage.message.id as string,
+        },
+      }));
+
+    // #region agent log
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "A",
+        location: "packages/streams/src/index.ts:xReadGroupPending:processed",
+        message: "xReadGroupPending processed messages",
+        data: {
+          streamName: STREAM_NAME,
+          rawCount: rawMessages.length,
+          filteredCount: messages.length,
+          filteredOut: rawMessages.length - messages.length,
+          messageIds: messages.map((m) => m.event.id),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
+    return messages;
+  } catch (error) {
+    // #region agent log
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "A",
+        location: "packages/streams/src/index.ts:xReadGroupPending:error",
+        message: "xReadGroupPending threw",
+        data: {
+          streamName: STREAM_NAME,
+          errorName: (error as Error)?.name,
+          errorMessage: (error as Error)?.message,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
+    console.error("Error reading pending from stream:", error);
+    return [];
+  }
+}
+
+// Use XAUTOCLAIM to take over *stale* pending messages from ANY consumer in
+// the group and assign them to the current worker. This is the robust way to
+// recover messages that were delivered to a dead consumer and never acked.
+export async function xAutoClaimStale(
+  options: AutoClaimOptions,
+): Promise<MessageType[]> {
+  try {
+    // #region agent log
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "A",
+        location: "packages/streams/src/index.ts:xAutoClaimStale:entry",
+        message: "xAutoClaimStale called",
+        data: {
+          streamName: STREAM_NAME,
+          consumerGroup: options.consumerGroup,
+          workerId: options.workerId,
+          minIdleMs: options.minIdleMs,
+          count: options.count,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
+    // node-redis XAUTOCLAIM returns: [messages, nextStartId]
+    const result = (await client.xAutoClaim(
+      STREAM_NAME,
+      options.consumerGroup,
+      options.workerId,
+      options.minIdleMs,
+      "0-0",
+      {
+        COUNT: options.count,
+      },
+    )) as unknown as { messages: StreamMessage[]; nextId: string };
+
+    const claimedMessages = result?.messages ?? null;
+
+    // #region agent log
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "A",
+        location: "packages/streams/src/index.ts:xAutoClaimStale:afterClaim",
+        message: "xAutoClaimStale result",
+        data: {
+          streamName: STREAM_NAME,
+          hasResult: !!result,
+          claimedCount: claimedMessages ? claimedMessages.length : 0,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
+    if (!claimedMessages || claimedMessages.length === 0) {
+      return [];
+    }
+
+    const messages: MessageType[] = claimedMessages
+      .filter(
+        (streamMessage: StreamMessage) =>
+          streamMessage.message.url && streamMessage.message.id,
+      )
+      .map((streamMessage: StreamMessage) => ({
+        id: streamMessage.id,
+        event: {
+          url: streamMessage.message.url as string,
+          id: streamMessage.message.id as string,
+        },
+      }));
+
+    // #region agent log
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "A",
+        location: "packages/streams/src/index.ts:xAutoClaimStale:processed",
+        message: "xAutoClaimStale processed messages",
+        data: {
+          streamName: STREAM_NAME,
+          claimedCount: claimedMessages.length,
+          filteredCount: messages.length,
+          filteredOut: claimedMessages.length - messages.length,
+          messageIds: messages.map((m) => m.event.id),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
+    return messages;
+  } catch (error) {
+    // #region agent log
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "A",
+        location: "packages/streams/src/index.ts:xAutoClaimStale:error",
+        message: "xAutoClaimStale threw",
+        data: {
+          streamName: STREAM_NAME,
+          errorName: (error as Error)?.name,
+          errorMessage: (error as Error)?.message,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
+    console.error("Error auto-claiming stale messages:", error);
     return [];
   }
 }
@@ -206,15 +581,57 @@ export async function xPendingDiagnostic(consumerGroup: string): Promise<void> {
     // Get stream length
     const streamLen = await client.xLen(STREAM_NAME);
     // Get stream info
-    const streamInfo = await client.xInfoStream(STREAM_NAME);
+    const streamInfo = (await client.xInfoStream(STREAM_NAME)) as unknown as {
+      length: number;
+      "radix-tree-keys": number;
+      "radix-tree-nodes": number;
+      "last-generated-id": string;
+      "entries-added": number;
+      groups: number;
+      "first-entry": { id: string } | null;
+      "last-entry": { id: string } | null;
+    };
 
-    console.log(
-      `[DEBUG:xPendingDiagnostic] streamName=${STREAM_NAME}, consumerGroup=${consumerGroup}, streamLength=${streamLen}, pendingSummary=${JSON.stringify(pendingSummary)}, firstEntry=${JSON.stringify(streamInfo?.firstEntry)}, lastEntry=${JSON.stringify(streamInfo?.lastEntry)}, groups=${streamInfo?.groups}`,
-    );
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "A,B",
+        location: "packages/streams/src/index.ts:xPendingDiagnostic",
+        message: "Stream diagnostics",
+        data: {
+          streamName: STREAM_NAME,
+          consumerGroup,
+          streamLength: streamLen,
+          pendingSummary: String(JSON.stringify(pendingSummary)).slice(0, 800),
+          firstEntry: streamInfo?.["first-entry"]?.id ?? null,
+          lastEntry: streamInfo?.["last-entry"]?.id ?? null,
+          groups: streamInfo?.groups,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
   } catch (error) {
-    console.log(
-      `[DEBUG:xPendingDiagnostic] ERROR - ${String(error)}, consumerGroup=${consumerGroup}`,
-    );
+    fetch("http://127.0.0.1:7243/ingest/4d066341-b328-4de4-954f-033a4efeb773", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "run1",
+        hypothesisId: "A,B,C",
+        location: "packages/streams/src/index.ts:xPendingDiagnostic:error",
+        message: "Stream diagnostics error",
+        data: {
+          streamName: STREAM_NAME,
+          consumerGroup,
+          errorName: (error as Error)?.name,
+          errorMessage: (error as Error)?.message,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
   }
 }
 // #endregion
