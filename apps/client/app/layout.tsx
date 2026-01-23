@@ -8,8 +8,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Turborepo Template",
-  description: "Full-stack TypeScript monorepo template",
+  title: "Uptique - better uptime",
+  description: "better uptime for your SaaS monitoring",
   icons: {
     icon: "/circle_logo.png",
     apple: "/circle_logo.png",
