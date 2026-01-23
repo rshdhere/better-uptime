@@ -10,6 +10,9 @@ dist
 coverage
 *.lcov
 
+reset-stream.ts
+reset-stream.js
+
 # logs
 logs
 _.log

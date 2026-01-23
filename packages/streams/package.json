@@ -7,6 +7,9 @@
     ".": "./src/index.ts",
     "./client": "./src/index.ts"
   },
+  "scripts": {
+    "reset-stream": "bun run src/reset-stream.ts"
+  },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
     "@types/bun": "latest"

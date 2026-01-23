@@ -8,7 +8,6 @@ const navigation = {
     { name: "Enterprise", href: "#", external: false },
     { name: "Pricing", href: "/pricing", external: false },
     { name: "Docs", href: "#", external: false },
-    { name: "Changelog", href: "/changelog", external: false },
   ],
   resources: [
     { name: "FAQs", href: "/pricing#faq-title", external: false },
@@ -17,7 +16,6 @@ const navigation = {
     { name: "YouTube", href: "#", external: true },
   ],
   company: [
-    { name: "About", href: "/about", external: false },
     { name: "Careers", href: "#", external: true },
     { name: "Contact", href: "#", external: false },
     { name: "Status", href: "#", external: false },
