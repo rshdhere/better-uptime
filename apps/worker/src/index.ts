@@ -90,10 +90,10 @@ async function startWorker() {
           console.warn(
             `[Worker] PEL Alert: ${pelInfo.pending} pending message(s), oldest idle: ${oldestIdleSeconds}s`,
           );
-          if (pelInfo.oldestIdleMs && pelInfo.oldestIdleMs > 120_000) {
-            // 2 mins
+          if (pelInfo.oldestIdleMs && pelInfo.oldestIdleMs > 180_000) {
+            // 3 mins
             console.error(
-              `[Worker] PEL CRITICAL: Oldest idle message is ${oldestIdleSeconds}s old (> 2 mins)`,
+              `[Worker] PEL CRITICAL: Oldest idle message is ${oldestIdleSeconds}s old (> 3 mins)`,
             );
           }
         }

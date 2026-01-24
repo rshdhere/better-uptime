@@ -147,7 +147,7 @@ export default function StatusPage() {
         : "bg-destructive";
 
       const date = new Date(point.checkedAt);
-      const windowStart = new Date(date.getTime() - 2 * 60 * 1000);
+      const windowStart = new Date(date.getTime() - 3 * 60 * 1000);
       const fromTime = windowStart.toLocaleTimeString("en-IN", {
         hour: "2-digit",
         minute: "2-digit",

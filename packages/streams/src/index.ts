@@ -267,7 +267,7 @@ export interface PendingInfo {
 
 /**
  * Check Redis PEL (Pending Entry List) status for monitoring.
- * Alert if pending > 0 or oldest idle > 2 mins.
+ * Alert if pending > 0 or oldest idle > 3 mins.
  */
 export async function xPendingInfo(
   consumerGroup: string,
