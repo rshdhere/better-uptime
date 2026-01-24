@@ -70,12 +70,20 @@ export default function DashboardPage() {
   });
 
   useEffect(() => {
-    if (websitesQuery.error) {
-      toast.error("Failed to load websites", {
-        description: getErrorMessage(websitesQuery.error),
-      });
+    // Never toast error for empty data - these are NOT errors:
+    // - No websites (cold start user)
+    // - Empty data is valid state
+    if (websitesQuery.error && websitesQuery.data === undefined) {
+      // Only show error if we don't have any data (not just empty array)
+      const errorMessage = getErrorMessage(websitesQuery.error);
+      // Don't show error for UNAUTHORIZED - it's handled by trpc client
+      if (!errorMessage.toLowerCase().includes("unauthorized")) {
+        toast.error("Failed to load websites", {
+          description: errorMessage,
+        });
+      }
     }
-  }, [websitesQuery.error]);
+  }, [websitesQuery.error, websitesQuery.data]);
 
   const registerWebsite = trpc.website.register.useMutation({
     onSuccess: async () => {

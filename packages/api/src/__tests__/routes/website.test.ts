@@ -278,11 +278,12 @@ describe("Website Routes", () => {
 
       expect(result.success).toBe(true);
 
-      // Verify deletion
+      // Verify soft deletion (isActive = false, not hard delete)
       const deleted = await prismaClient.website.findUnique({
         where: { id: website.id },
       });
-      expect(deleted).toBeNull();
+      expect(deleted).not.toBeNull();
+      expect(deleted?.isActive).toBe(false);
     });
 
     it("should fail if website belongs to another user", async () => {

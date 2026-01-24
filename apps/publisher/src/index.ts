@@ -9,7 +9,12 @@ async function publish() {
   }
   inFlight = true;
   try {
+    // Always fetch fresh websites - never cache, never startup-only
+    // Filter by isActive to only publish active websites
     const websites = await prismaClient.website.findMany({
+      where: {
+        isActive: true,
+      },
       select: {
         url: true,
         id: true,
@@ -17,11 +22,13 @@ async function publish() {
     });
 
     if (websites.length === 0) {
-      console.log(`[Publisher] No websites found in database`);
+      console.log(`[Publisher] No active websites found in database`);
       return;
     }
 
-    console.log(`[Publisher] Found ${websites.length} website(s) to publish`);
+    console.log(
+      `[Publisher] Found ${websites.length} active website(s) to publish`,
+    );
 
     await xAddBulk(websites.map((w) => ({ url: w.url, id: w.id })));
 
@@ -35,10 +42,10 @@ async function publish() {
   }
 }
 
-console.log(`[Publisher] Starting publisher service (interval: 2m)`);
+console.log(`[Publisher] Starting publisher service (interval: 3m)`);
 setInterval(
   () => {
     publish();
   },
-  2 * 60 * 1000,
-); // push to the stream, every 2 mins
+  3 * 60 * 1000,
+); // push to the stream, every 3 mins

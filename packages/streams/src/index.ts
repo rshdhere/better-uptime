@@ -123,7 +123,6 @@ export async function xReadGroup(
       return [];
     }
 
-    const rawMessages = response[0].messages;
     const messages: MessageType[] = response[0].messages
       .filter(
         (streamMessage: StreamMessage) =>
@@ -209,4 +208,84 @@ export async function xAckBulk(options: AckBulkOptions) {
       xAck({ consumerGroup: options.consumerGroup, streamId: eventId }),
     ),
   );
+}
+
+export interface PendingInfo {
+  pending: number;
+  oldestIdleMs: number | null;
+  consumers: Array<{
+    name: string;
+    pending: number;
+  }>;
+}
+
+/**
+ * Check Redis PEL (Pending Entry List) status for monitoring.
+ * Alert if pending > 0 or oldest idle > 2 mins.
+ */
+export async function xPendingInfo(
+  consumerGroup: string,
+): Promise<PendingInfo> {
+  try {
+    // Get summary (pending count, first/last IDs, consumers)
+    const summary = (await client.xPending(
+      STREAM_NAME,
+      consumerGroup,
+    )) as unknown as {
+      pending: number;
+      firstId: string | null;
+      lastId: string | null;
+      consumers: Array<{ name: string; deliveriesCounter: number }> | null;
+    } | null;
+
+    if (!summary || summary.pending === 0) {
+      return {
+        pending: 0,
+        oldestIdleMs: null,
+        consumers: [],
+      };
+    }
+
+    // Get detailed list to find oldest idle time using sendCommand
+    // XPENDING key group start end count
+    let oldestIdleMs: number | null = null;
+    try {
+      const pendingEntries = (await client.sendCommand([
+        "XPENDING",
+        STREAM_NAME,
+        consumerGroup,
+        "-",
+        "+",
+        "100",
+      ])) as Array<[string, string, number, number]> | null;
+
+      if (pendingEntries && pendingEntries.length > 0) {
+        // XPENDING detailed format: [id, consumer, idleMs, deliveryCount]
+        const idleTimes = pendingEntries.map(([, , idleMs]) => idleMs);
+        oldestIdleMs = Math.max(...idleTimes);
+      }
+    } catch (error) {
+      // If detailed query fails, we still have summary info
+      console.warn(
+        "[xPendingInfo] Failed to get detailed pending entries:",
+        error,
+      );
+    }
+
+    // Map consumers from deliveriesCounter to pending
+    const consumers =
+      summary.consumers?.map((c) => ({
+        name: c.name,
+        pending: c.deliveriesCounter,
+      })) || [];
+
+    return {
+      pending: summary.pending,
+      oldestIdleMs,
+      consumers,
+    };
+  } catch (error) {
+    console.error("Error checking PEL status:", error);
+    throw error;
+  }
 }
