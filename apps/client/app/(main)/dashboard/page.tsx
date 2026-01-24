@@ -123,10 +123,7 @@ export default function DashboardPage() {
   const isDeleting = deleteWebsite.isPending;
   const websites = websitesQuery.data?.websites ?? [];
 
-  const dashboardTitle = useMemo(() => {
-    if (websitesQuery.isLoading) return "Dashboard";
-    return `Dashboard (${websites.length})`;
-  }, [websites.length, websitesQuery.isLoading]);
+  const dashboardTitle = "Dashboard";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

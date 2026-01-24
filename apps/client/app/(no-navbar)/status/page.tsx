@@ -119,7 +119,7 @@ export default function StatusPage() {
 
     if (currentStatus.status === "UP") {
       return {
-        label: "All systems operational",
+        label: "Up",
         className:
           "rounded-full border border-gray-200 py-1 pl-1 pr-2 dark:border-gray-800",
         tooltip: `Up since ${formattedTime}${
@@ -764,7 +764,7 @@ export default function StatusPage() {
                           </span>{" "}
                           We&apos;re receiving a 403 Forbidden response. For
                           accurate monitoring, disable the Cloudflare proxy
-                          (orange cloud → gray cloud) in your DNS settings.
+                          (orange cloud → gray cloud).
                         </AlertDescription>
                       </Alert>
                     )}
