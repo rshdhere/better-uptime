@@ -17,6 +17,19 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 
+// Tracker configuration - single source of truth
+// Changing CHECK_INTERVAL_MINUTES automatically adjusts all calculations
+const TRACKER_CONFIG = {
+  CHECK_INTERVAL_MINUTES: 3,
+  SLOT_COUNT: 30,
+  get WINDOW_MINUTES() {
+    return this.CHECK_INTERVAL_MINUTES * this.SLOT_COUNT; // 90 minutes
+  },
+  // Daily view configuration
+  DAY_WINDOW_COUNT: 30, // Show last 30 days
+  TIMEZONE: "Asia/Kolkata", // Timezone for date calculations
+} as const;
+
 function getErrorMessage(error: { message: string }): string {
   try {
     const parsed = JSON.parse(error.message);
@@ -29,6 +42,8 @@ function getErrorMessage(error: { message: string }): string {
   return error.message;
 }
 
+type ViewMode = "per-check" | "per-day";
+
 export default function StatusPage() {
   const router = useRouter();
 
@@ -36,6 +51,8 @@ export default function StatusPage() {
     if (typeof window === "undefined") return null;
     return localStorage.getItem("token");
   });
+
+  const [viewMode, setViewMode] = useState<ViewMode>("per-check");
 
   useEffect(() => {
     if (!token) {
@@ -118,42 +135,24 @@ export default function StatusPage() {
     };
   };
 
-  // Convert status points to tracker data - memoized to avoid recalculating on every render
+  // TIME-BUCKETED RENDERING: Use explicit time buckets to ensure stable, deterministic display.
+  // Each bucket represents one check interval. This makes gaps explicit and prevents visual jitter
+  // when data refetches, as bucket boundaries are based on timestamps, not array positions.
   const getTrackerData = (
     statusPoints: Array<{
       status: "UP" | "DOWN";
       checkedAt: Date | string;
       responseTimeMs: number | null;
     }>,
-  ): TrackerBlockProps[] => {
-    const SLOT_COUNT = 30;
-    // Keep the latest N points, then sort ascending (oldest -> newest)
-    const latestPoints = statusPoints
-      .slice()
-      .sort(
-        (a, b) =>
-          new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime(),
-      )
-      .slice(-SLOT_COUNT);
+  ): { trackerData: TrackerBlockProps[]; checksInWindow: number } => {
+    const { CHECK_INTERVAL_MINUTES, SLOT_COUNT, WINDOW_MINUTES } =
+      TRACKER_CONFIG;
+    const INTERVAL_MS = CHECK_INTERVAL_MINUTES * 60 * 1000;
 
-    const sorted = [...latestPoints].sort(
-      (a, b) =>
-        new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime(),
-    );
-    const result: TrackerBlockProps[] = sorted.map((point, index) => {
-      const isUp = point.status === "UP";
-      const color = isUp
-        ? "bg-indigo-600 dark:bg-indigo-500"
-        : "bg-destructive";
-
-      const date = new Date(point.checkedAt);
-      const windowStart = new Date(date.getTime() - 3 * 60 * 1000);
-      const fromTime = windowStart.toLocaleTimeString("en-IN", {
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: "Asia/Kolkata",
-      });
-      const toTime = date.toLocaleTimeString("en-IN", {
+    // Helper: Format timestamp for tooltip display
+    const formatTime = (timestamp: number) => {
+      const date = new Date(timestamp);
+      const timeStr = date.toLocaleTimeString("en-IN", {
         hour: "2-digit",
         minute: "2-digit",
         timeZone: "Asia/Kolkata",
@@ -163,41 +162,376 @@ export default function StatusPage() {
         day: "numeric",
         timeZone: "Asia/Kolkata",
       });
+      return { timeStr, dateStr };
+    };
+
+    // Helper: Round timestamp down to nearest interval boundary
+    // This ensures deterministic bucket boundaries across refetches
+    const roundDownToInterval = (timestamp: number): number => {
+      return Math.floor(timestamp / INTERVAL_MS) * INTERVAL_MS;
+    };
+
+    // Early return if no status points - return all empty buckets
+    // Note: Without data, we can't determine bucket times, so show generic placeholders
+    if (statusPoints.length === 0) {
+      const trackerData = Array.from(
+        { length: SLOT_COUNT },
+        (_: unknown, bucketIndex: number) => {
+          return {
+            key: `bucket-empty-${bucketIndex}`,
+            tooltip: "No check in this interval",
+            hoverEffect: false,
+          } satisfies TrackerBlockProps;
+        },
+      );
+      return { trackerData, checksInWindow: 0 };
+    }
+
+    // Find the most recent check and use it to anchor bucket boundaries
+    // This ensures buckets align with actual check times, not arbitrary client time
+    const mostRecentTime = Math.max(
+      ...statusPoints.map((point) => new Date(point.checkedAt).getTime()),
+    );
+
+    // Round down to nearest interval boundary to create stable bucket alignment
+    // Bucket 0 (most recent) ends at this rounded time
+    const bucket0End = roundDownToInterval(mostRecentTime) + INTERVAL_MS;
+
+    // Create time buckets: each bucket represents one check interval
+    // Buckets are ordered from oldest (left) to newest (right)
+    const buckets: Array<{
+      start: number;
+      end: number;
+      check: (typeof statusPoints)[number] | null;
+    }> = [];
+
+    for (let i = 0; i < SLOT_COUNT; i++) {
+      const bucketEnd = bucket0End - i * INTERVAL_MS;
+      const bucketStart = bucketEnd - INTERVAL_MS;
+      buckets.push({ start: bucketStart, end: bucketEnd, check: null });
+    }
+
+    // Reverse to get oldest → newest order (left → right in UI)
+    buckets.reverse();
+
+    // Assign checks to buckets based on timestamp
+    // A check belongs to the bucket whose time range contains its timestamp
+    for (const point of statusPoints) {
+      const checkTime = new Date(point.checkedAt).getTime();
+      const windowStart = bucket0End - WINDOW_MINUTES * 60 * 1000;
+
+      // Only consider checks within the time window
+      if (checkTime < windowStart || checkTime > bucket0End) {
+        continue;
+      }
+
+      // Find the bucket this check belongs to
+      for (const bucket of buckets) {
+        // Check falls within this bucket's time range
+        // Use >= start and < end to ensure each check maps to exactly one bucket
+        if (checkTime >= bucket.start && checkTime < bucket.end) {
+          // If bucket already has a check, keep the most recent one
+          if (
+            !bucket.check ||
+            new Date(point.checkedAt).getTime() >
+              new Date(bucket.check.checkedAt).getTime()
+          ) {
+            bucket.check = point;
+          }
+          break;
+        }
+      }
+    }
+
+    // Count checks within the window (filled buckets)
+    let checksInWindow = 0;
+
+    // Map buckets to tracker blocks
+    const trackerData = buckets.map((bucket, bucketIndex) => {
+      const { timeStr: fromTime, dateStr } = formatTime(bucket.start);
+      const { timeStr: toTime } = formatTime(bucket.end);
+
+      // Empty bucket: no check occurred in this interval
+      if (!bucket.check) {
+        return {
+          key: `bucket-${bucket.start}-${bucketIndex}`,
+          tooltip: `No check in this interval • ${dateStr} ${fromTime} – ${toTime}`,
+          hoverEffect: false,
+        } satisfies TrackerBlockProps;
+      }
+
+      // Filled bucket: show check details
+      checksInWindow++;
+      const isUp = bucket.check.status === "UP";
+      const checkDate = new Date(bucket.check.checkedAt);
+      const { timeStr: checkedTime, dateStr: checkedDateStr } = formatTime(
+        checkDate.getTime(),
+      );
 
       const tooltipParts = [
-        point.status === "UP" ? "UP" : "DOWN",
-        `${dateStr} ${fromTime} – ${toTime}`,
+        bucket.check.status === "UP" ? "UP" : "DOWN",
+        `${checkedDateStr} ${checkedTime}`,
       ];
-      if (point.responseTimeMs !== null) {
-        tooltipParts.push(`${point.responseTimeMs}ms`);
+      if (bucket.check.responseTimeMs !== null) {
+        tooltipParts.push(`${bucket.check.responseTimeMs}ms`);
       }
       const tooltip = tooltipParts.join(" • ");
 
       return {
-        key: index,
-        color,
+        key: `bucket-${bucket.start}-${bucket.check.checkedAt}`,
+        color: isUp ? "bg-indigo-600 dark:bg-indigo-500" : "bg-destructive",
         tooltip,
         hoverEffect: true,
         hoverCardClassName: isUp
           ? "border-indigo-600/30 bg-indigo-600/10 text-indigo-600 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300"
           : "border-destructive/20 bg-destructive/10 text-destructive",
-      };
+      } satisfies TrackerBlockProps;
     });
 
-    // Always render a 30-slot strip; colored ticks start at the left and grow rightward.
-    if (result.length < SLOT_COUNT) {
-      const placeholders = Array.from(
-        { length: SLOT_COUNT - result.length },
-        (_, index) => ({
-          key: `placeholder-${index}`,
-          tooltip: "No checks yet",
-          hoverEffect: false,
-        }),
-      ) satisfies TrackerBlockProps[];
-      return [...result, ...placeholders];
+    return { trackerData, checksInWindow };
+  };
+
+  // DAILY AGGREGATION: Group status events by calendar day and calculate downtime metrics.
+  // Each day is represented as one tick in the tracker, showing overall health for that day.
+  const buildDailyTrackerData = (
+    statusPoints: Array<{
+      status: "UP" | "DOWN";
+      checkedAt: Date | string;
+      responseTimeMs: number | null;
+    }>,
+  ): { trackerData: TrackerBlockProps[]; daysInWindow: number } => {
+    const { DAY_WINDOW_COUNT, TIMEZONE } = TRACKER_CONFIG;
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+    // Helper: Get date string key in timezone (YYYY-MM-DD format)
+    // Used for grouping checks by calendar day in the target timezone
+    const getDayKey = (timestamp: number): string => {
+      const date = new Date(timestamp);
+      return date.toLocaleDateString("en-CA", {
+        timeZone: TIMEZONE,
+      }); // en-CA gives YYYY-MM-DD format
+    };
+
+    // Helper: Get start of day timestamp in timezone (for day boundaries)
+    // Calculates the UTC timestamp that represents midnight in the target timezone
+    const getDayStartFromKey = (dayKey: string): number => {
+      const [year, month, day] = dayKey.split("-").map(Number);
+      // Create a date at noon UTC (avoids DST edge cases)
+      const noonUTC = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+
+      // Get what this UTC time represents in the target timezone
+      const tzFormatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: TIMEZONE,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+
+      const tzParts = tzFormatter.formatToParts(noonUTC);
+      const tzYear = parseInt(tzParts.find((p) => p.type === "year")!.value);
+      const tzMonth = parseInt(tzParts.find((p) => p.type === "month")!.value);
+      const tzDay = parseInt(tzParts.find((p) => p.type === "day")!.value);
+      const tzHour = parseInt(tzParts.find((p) => p.type === "hour")!.value);
+      const tzMinute = parseInt(
+        tzParts.find((p) => p.type === "minute")!.value,
+      );
+
+      // Calculate offset: difference between UTC noon and timezone representation
+      const tzNoon = new Date(
+        Date.UTC(tzYear, tzMonth - 1, tzDay, tzHour, tzMinute, 0),
+      );
+      const offset = noonUTC.getTime() - tzNoon.getTime();
+
+      // Midnight in timezone = UTC midnight adjusted by the same offset
+      const utcMidnight = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+      return utcMidnight.getTime() - offset;
+    };
+
+    // Helper: Format date for tooltip
+    const formatDate = (timestamp: number) => {
+      const date = new Date(timestamp);
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        timeZone: TIMEZONE,
+      });
+    };
+
+    // Early return if no status points
+    if (statusPoints.length === 0) {
+      const trackerData = Array.from(
+        { length: DAY_WINDOW_COUNT },
+        (_: unknown, dayIndex: number) => {
+          return {
+            key: `day-empty-${dayIndex}`,
+            tooltip: "No data recorded",
+            hoverEffect: false,
+          } satisfies TrackerBlockProps;
+        },
+      );
+      return { trackerData, daysInWindow: 0 };
     }
 
-    return result;
+    // Find the most recent check to anchor the day window
+    const mostRecentTime = Math.max(
+      ...statusPoints.map((point) => new Date(point.checkedAt).getTime()),
+    );
+
+    // Create day buckets: each bucket represents one calendar day
+    // Use day keys (YYYY-MM-DD strings) for grouping
+    const dayBuckets: Map<
+      string,
+      {
+        dayKey: string;
+        dayStart: number;
+        checks: Array<{
+          status: "UP" | "DOWN";
+          checkedAt: number;
+          responseTimeMs: number | null;
+        }>;
+      }
+    > = new Map();
+
+    // Initialize all day buckets in the window
+    // Generate day keys for the last DAY_WINDOW_COUNT days
+    const today = new Date(mostRecentTime);
+    for (let i = 0; i < DAY_WINDOW_COUNT; i++) {
+      const dayDate = new Date(today);
+      dayDate.setDate(today.getDate() - i);
+      const dayKey = getDayKey(dayDate.getTime());
+      const dayStart = getDayStartFromKey(dayKey);
+      dayBuckets.set(dayKey, { dayKey, dayStart, checks: [] });
+    }
+
+    // Group checks by calendar day
+    for (const point of statusPoints) {
+      const checkTime = new Date(point.checkedAt).getTime();
+      const dayKey = getDayKey(checkTime);
+
+      // Only consider checks within the day window
+      if (!dayBuckets.has(dayKey)) {
+        continue;
+      }
+
+      const bucket = dayBuckets.get(dayKey)!;
+      bucket.checks.push({
+        status: point.status,
+        checkedAt: checkTime,
+        responseTimeMs: point.responseTimeMs,
+      });
+    }
+
+    // Calculate downtime and uptime for each day
+    // Sort buckets by day key (oldest first, which is lexicographically correct for YYYY-MM-DD)
+    const sortedDays = Array.from(dayBuckets.values()).sort((a, b) =>
+      a.dayKey.localeCompare(b.dayKey),
+    );
+
+    let daysInWindow = 0;
+    const trackerData = sortedDays.map((bucket, dayIndex) => {
+      const { dayKey, dayStart, checks } = bucket;
+
+      // No checks for this day
+      if (checks.length === 0) {
+        return {
+          key: `day-${dayKey}-${dayIndex}`,
+          tooltip: `No data recorded • ${formatDate(dayStart)}`,
+          hoverEffect: false,
+        } satisfies TrackerBlockProps;
+      }
+
+      daysInWindow++;
+
+      // Calculate downtime duration for the day
+      // Sort checks by time to process chronologically
+      const sortedChecks = [...checks].sort(
+        (a, b) => a.checkedAt - b.checkedAt,
+      );
+
+      let downtimeMinutes = 0;
+      let lastDownTime: number | null = null;
+      const dayEnd = dayStart + MS_PER_DAY;
+
+      // Process checks chronologically to calculate downtime
+      // If a check is DOWN, start tracking downtime until next UP check
+      for (let i = 0; i < sortedChecks.length; i++) {
+        const check = sortedChecks[i];
+        const isDown = check.status === "DOWN";
+
+        if (isDown && lastDownTime === null) {
+          // Start of downtime period
+          lastDownTime = check.checkedAt;
+        } else if (!isDown && lastDownTime !== null) {
+          // End of downtime period
+          const downtimeMs = check.checkedAt - lastDownTime;
+          downtimeMinutes += downtimeMs / (60 * 1000);
+          lastDownTime = null;
+        }
+      }
+
+      // If day ended while still down, add remaining downtime
+      if (lastDownTime !== null) {
+        const downtimeMs = dayEnd - lastDownTime;
+        downtimeMinutes += downtimeMs / (60 * 1000);
+      }
+
+      // Calculate uptime percentage
+      const totalMinutesInDay = 24 * 60;
+      const uptimeMinutes = totalMinutesInDay - downtimeMinutes;
+      const uptimePercentage = (uptimeMinutes / totalMinutesInDay) * 100;
+
+      // Determine color based on uptime
+      // Fully UP (100%) → indigo (up color)
+      // Partially DOWN (0% < uptime < 100%) → amber (warning color)
+      // Fully DOWN (0%) → destructive (down color)
+      let color: string;
+      let hoverCardClassName: string;
+
+      if (uptimePercentage === 100) {
+        // Fully UP
+        color = "bg-indigo-600 dark:bg-indigo-500";
+        hoverCardClassName =
+          "border-indigo-600/30 bg-indigo-600/10 text-indigo-600 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300";
+      } else if (uptimePercentage === 0) {
+        // Fully DOWN
+        color = "bg-destructive";
+        hoverCardClassName =
+          "border-destructive/20 bg-destructive/10 text-destructive";
+      } else {
+        // Partially DOWN (warning)
+        color = "bg-amber-500 dark:bg-amber-500";
+        hoverCardClassName =
+          "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400";
+      }
+
+      // Format downtime for tooltip
+      const downtimeStr =
+        downtimeMinutes < 1
+          ? "<1m"
+          : downtimeMinutes < 60
+            ? `${Math.round(downtimeMinutes)}m`
+            : `${Math.floor(downtimeMinutes / 60)}h ${Math.round(downtimeMinutes % 60)}m`;
+
+      const tooltip = [
+        formatDate(dayStart),
+        `Downtime: ${downtimeStr}`,
+        `Uptime: ${uptimePercentage.toFixed(2)}%`,
+      ].join(" • ");
+
+      return {
+        key: `day-${dayKey}-${dayIndex}`,
+        color,
+        tooltip,
+        hoverEffect: true,
+        hoverCardClassName,
+      } satisfies TrackerBlockProps;
+    });
+
+    return { trackerData, daysInWindow };
   };
 
   // Memoize processed websites data to avoid recalculating on every render
@@ -205,20 +539,37 @@ export default function StatusPage() {
     if (!statusQuery.data?.websites) return [];
     return statusQuery.data.websites.map((website) => {
       const hasData = website.statusPoints.length > 0;
-      const websiteTrackerData = getTrackerData(
-        hasData ? website.statusPoints : [],
-      );
+
+      // Use appropriate tracker based on view mode
+      let trackerData: TrackerBlockProps[];
+      let checksInWindow = 0;
+      let daysInWindow = 0;
+
+      if (viewMode === "per-day") {
+        const result = buildDailyTrackerData(
+          hasData ? website.statusPoints : [],
+        );
+        trackerData = result.trackerData;
+        daysInWindow = result.daysInWindow;
+      } else {
+        const result = getTrackerData(hasData ? website.statusPoints : []);
+        trackerData = result.trackerData;
+        checksInWindow = result.checksInWindow;
+      }
+
       const hasCloudflareBlock = website.currentStatus?.httpStatusCode === 403;
 
       return {
         website,
-        trackerData: websiteTrackerData,
+        trackerData,
+        checksInWindow,
+        daysInWindow,
         hasData,
         badge: buildStatusBadge(website.currentStatus),
         hasCloudflareBlock,
       };
     });
-  }, [statusQuery.data]);
+  }, [statusQuery.data, viewMode]);
 
   return (
     <div className="relative mx-auto w-full max-w-5xl px-4 pt-28 pb-16">
@@ -281,7 +632,31 @@ export default function StatusPage() {
 
       <div className="mt-8 rounded-2xl border border-border bg-card text-card-foreground">
         <div className="border-b border-border px-6 py-4">
-          <h2 className="text-lg font-semibold">Status Overview</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Status Overview</h2>
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 p-1">
+              <button
+                onClick={() => setViewMode("per-check")}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  viewMode === "per-check"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Per Check
+              </button>
+              <button
+                onClick={() => setViewMode("per-day")}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  viewMode === "per-day"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Per Day
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="px-6 py-4">
@@ -314,6 +689,8 @@ export default function StatusPage() {
                 ({
                   website,
                   trackerData,
+                  checksInWindow,
+                  daysInWindow,
                   hasData,
                   badge,
                   hasCloudflareBlock,
@@ -343,12 +720,21 @@ export default function StatusPage() {
                         </div>
                         {hasData && (
                           <div className="text-sm text-muted-foreground">
-                            {website.statusPoints.length} checks
+                            {viewMode === "per-day"
+                              ? `${daysInWindow} days`
+                              : `${checksInWindow} checks`}
                           </div>
                         )}
                       </div>
                     </div>
-                    <Tracker data={trackerData} hoverEffect={hasData} />
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        {viewMode === "per-day"
+                          ? `Last ${TRACKER_CONFIG.DAY_WINDOW_COUNT} days`
+                          : `Last ${TRACKER_CONFIG.WINDOW_MINUTES} minutes (${TRACKER_CONFIG.CHECK_INTERVAL_MINUTES}-minute intervals)`}
+                      </p>
+                      <Tracker data={trackerData} hoverEffect={hasData} />
+                    </div>
                     {hasCloudflareBlock && (
                       <Alert className="border-amber-500/50 bg-amber-500/10">
                         <AlertDescription className="text-amber-700 dark:text-amber-400">
