@@ -59,30 +59,44 @@ export interface AutoClaimOptions {
   count: number;
 }
 
-const redisClient = createClient({
-  username: REDIS_USERNAME,
-  password: REDIS_PASSWORD,
-  socket: {
-    host: REDIS_HOST,
-    port: Number(REDIS_PORT),
-  },
-});
+// In test environment, skip Redis connection and use mocks
+const isTestEnv = process.env.NODE_ENV === "test";
 
-redisClient.on("error", (err) => {
-  console.error("Redis Client Error", err);
-  process.exit(1);
-});
+let client: ReturnType<typeof createClient> | null = null;
 
-let client: typeof redisClient;
+if (!isTestEnv) {
+  const redisClient = createClient({
+    username: REDIS_USERNAME,
+    password: REDIS_PASSWORD,
+    socket: {
+      host: REDIS_HOST,
+      port: Number(REDIS_PORT),
+    },
+  });
 
-try {
-  client = await redisClient.connect();
-} catch (error) {
-  console.error("Failed to connect to Redis:", error);
-  process.exit(1);
+  redisClient.on("error", (err) => {
+    console.error("Redis Client Error", err);
+    process.exit(1);
+  });
+
+  try {
+    client = await redisClient.connect();
+  } catch (error) {
+    console.error("Failed to connect to Redis:", error);
+    process.exit(1);
+  }
 }
 
 export async function xAddBulk(websites: WebsiteEvent[]) {
+  // Mock in test environment
+  if (isTestEnv) {
+    return;
+  }
+
+  if (!client) {
+    throw new Error("Redis client not initialized");
+  }
+
   // Avoid unbounded Promise.all fan-out (can freeze machines with large website counts).
   // Use Redis pipelining in bounded batches.
   const batchSize = 250;
@@ -103,6 +117,15 @@ export async function xAddBulk(websites: WebsiteEvent[]) {
 export async function xReadGroup(
   options: ReadGroupOptions,
 ): Promise<MessageType[]> {
+  // Mock in test environment
+  if (isTestEnv) {
+    return [];
+  }
+
+  if (!client) {
+    throw new Error("Redis client not initialized");
+  }
+
   try {
     const response = (await client.xReadGroup(
       options.consumerGroup,
@@ -149,6 +172,15 @@ export async function xReadGroup(
 export async function xAutoClaimStale(
   options: AutoClaimOptions,
 ): Promise<MessageType[]> {
+  // Mock in test environment
+  if (isTestEnv) {
+    return [];
+  }
+
+  if (!client) {
+    throw new Error("Redis client not initialized");
+  }
+
   try {
     // node-redis XAUTOCLAIM returns: [messages, nextStartId]
     const result = (await client.xAutoClaim(
@@ -189,6 +221,15 @@ export async function xAutoClaimStale(
 }
 
 async function xAck(options: AckOptions): Promise<number> {
+  // Mock in test environment
+  if (isTestEnv) {
+    return 1;
+  }
+
+  if (!client) {
+    throw new Error("Redis client not initialized");
+  }
+
   try {
     const result = await client.xAck(
       STREAM_NAME,
@@ -203,6 +244,11 @@ async function xAck(options: AckOptions): Promise<number> {
 }
 
 export async function xAckBulk(options: AckBulkOptions) {
+  // Mock in test environment
+  if (isTestEnv) {
+    return;
+  }
+
   await Promise.all(
     options.eventIds.map((eventId) =>
       xAck({ consumerGroup: options.consumerGroup, streamId: eventId }),
@@ -226,6 +272,19 @@ export interface PendingInfo {
 export async function xPendingInfo(
   consumerGroup: string,
 ): Promise<PendingInfo> {
+  // Mock in test environment
+  if (isTestEnv) {
+    return {
+      pending: 0,
+      oldestIdleMs: null,
+      consumers: [],
+    };
+  }
+
+  if (!client) {
+    throw new Error("Redis client not initialized");
+  }
+
   try {
     // Get summary (pending count, first/last IDs, consumers)
     const summary = (await client.xPending(
