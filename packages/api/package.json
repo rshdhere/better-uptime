@@ -31,6 +31,7 @@
     "@repo/clickhouse": "workspace:*",
     "@repo/config": "workspace:*",
     "@repo/store": "workspace:*",
+    "@repo/streams": "workspace:*",
     "@repo/validators": "workspace:*",
     "@trpc/client": "^11.8.1",
     "@trpc/server": "^11.8.1",

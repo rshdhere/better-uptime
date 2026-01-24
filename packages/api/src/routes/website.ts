@@ -10,6 +10,7 @@ import { protectedProcedure, router } from "../trpc.js";
 import { prismaClient } from "@repo/store";
 import { TRPCError } from "@trpc/server";
 import { getRecentStatusEvents } from "@repo/clickhouse";
+import { xAddBulk } from "@repo/streams";
 
 export const websiteRouter = router({
   register: protectedProcedure
@@ -42,6 +43,21 @@ export const websiteRouter = router({
         },
       });
 
+      // Immediate first check: publish website immediately once
+      // Then let periodic publisher handle rest
+      try {
+        await xAddBulk([{ url: website.url, id: website.id }]);
+        console.log(
+          `[website.register] Published website ${website.id} immediately for first check`,
+        );
+      } catch (error) {
+        // Non-fatal: periodic publisher will pick it up
+        console.error(
+          `[website.register] Failed to publish website immediately:`,
+          error,
+        );
+      }
+
       return website;
     }),
 
@@ -51,6 +67,7 @@ export const websiteRouter = router({
     const websites = await prismaClient.website.findMany({
       where: {
         userId,
+        isActive: true,
       },
       orderBy: {
         createdAt: "desc",
@@ -74,6 +91,7 @@ export const websiteRouter = router({
         where: {
           id,
           userId,
+          isActive: true,
         },
       });
 
@@ -95,6 +113,8 @@ export const websiteRouter = router({
       const userId = opts.ctx.user.userId;
 
       // First verify the website exists and belongs to the user
+      // Note: We check without isActive filter here because we want to allow
+      // updating/deleting inactive websites too
       const existingWebsite = await prismaClient.website.findFirst({
         where: {
           id,
@@ -153,8 +173,11 @@ export const websiteRouter = router({
       });
     }
 
-    await prismaClient.website.delete({
+    // Soft delete: set isActive = false instead of hard delete
+    // This prevents race conditions, orphan stream messages, and UI confusion
+    await prismaClient.website.update({
       where: { id },
+      data: { isActive: false },
     });
 
     return { success: true };
@@ -165,10 +188,11 @@ export const websiteRouter = router({
     .query(async (opts) => {
       const userId = opts.ctx.user.userId;
 
-      // 1. Get websites from Postgres
+      // 1. Get websites from Postgres (only active ones)
       const websites = await prismaClient.website.findMany({
         where: {
           userId,
+          isActive: true,
         },
         orderBy: {
           createdAt: "desc",

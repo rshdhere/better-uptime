@@ -55,12 +55,21 @@ export default function StatusPage() {
   });
 
   useEffect(() => {
-    if (statusQuery.error) {
-      toast.error("Failed to load status", {
-        description: getErrorMessage(statusQuery.error),
-      });
+    // Never toast error for empty data - these are NOT errors:
+    // - No websites
+    // - No statusPoints yet (cold start user)
+    // - Empty data is valid state
+    if (statusQuery.error && statusQuery.data === undefined) {
+      // Only show error if we don't have any data (not just empty array)
+      const errorMessage = getErrorMessage(statusQuery.error);
+      // Don't show error for UNAUTHORIZED - it's handled by trpc client
+      if (!errorMessage.toLowerCase().includes("unauthorized")) {
+        toast.error("Failed to load status", {
+          description: errorMessage,
+        });
+      }
     }
-  }, [statusQuery.error]);
+  }, [statusQuery.error, statusQuery.data]);
 
   const buildStatusBadge = (
     currentStatus:

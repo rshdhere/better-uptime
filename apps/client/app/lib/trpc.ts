@@ -24,6 +24,21 @@ export function getTrpcClient() {
               : null;
           return token ? { Authorization: `Bearer ${token}` } : {};
         },
+        async fetch(url, options) {
+          const response = await fetch(url, options);
+
+          // On 401 UNAUTHORIZED → force logout
+          if (response.status === 401) {
+            if (typeof window !== "undefined") {
+              localStorage.removeItem("token");
+              window.dispatchEvent(new Event("auth-change"));
+              // Redirect to login
+              window.location.href = "/login";
+            }
+          }
+
+          return response;
+        },
       }),
     ],
   });

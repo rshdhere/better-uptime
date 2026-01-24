@@ -276,6 +276,9 @@ importers:
       '@repo/store':
         specifier: workspace:*
         version: link:../store
+      '@repo/streams':
+        specifier: workspace:*
+        version: link:../streams
       '@repo/validators':
         specifier: workspace:*
         version: link:../validators

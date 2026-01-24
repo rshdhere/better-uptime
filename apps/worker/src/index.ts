@@ -4,7 +4,13 @@ import {
   type UptimeStatus,
 } from "@repo/clickhouse";
 import { REGION_ID, WORKER_ID } from "@repo/config";
-import { xAckBulk, xReadGroup, xAutoClaimStale } from "@repo/streams";
+import {
+  xAckBulk,
+  xReadGroup,
+  xAutoClaimStale,
+  xPendingInfo,
+} from "@repo/streams";
+import { prismaClient } from "@repo/store";
 import axios from "axios";
 import process from "node:process";
 
@@ -72,104 +78,195 @@ async function startWorker() {
     )})`,
   );
 
-  // Drain any *stale pending* (already-delivered but unacked) messages first so
-  // we don't leave older websites permanently stuck on dead consumers. We use
-  // XAUTOCLAIM underneath so we can take over messages from other consumers.
+  // Start PEL monitoring (every 5 mins)
+  setInterval(
+    async () => {
+      try {
+        const pelInfo = await xPendingInfo(REGION_ID);
+        if (pelInfo.pending > 0) {
+          const oldestIdleSeconds = pelInfo.oldestIdleMs
+            ? Math.floor(pelInfo.oldestIdleMs / 1000)
+            : 0;
+          console.warn(
+            `[Worker] PEL Alert: ${pelInfo.pending} pending message(s), oldest idle: ${oldestIdleSeconds}s`,
+          );
+          if (pelInfo.oldestIdleMs && pelInfo.oldestIdleMs > 120_000) {
+            // 2 mins
+            console.error(
+              `[Worker] PEL CRITICAL: Oldest idle message is ${oldestIdleSeconds}s old (> 2 mins)`,
+            );
+          }
+        }
+      } catch (error) {
+        console.error("[Worker] Failed to check PEL status:", error);
+      }
+    },
+    5 * 60 * 1000,
+  ); // Every 5 mins
+
   while (true) {
-    const pendingBatch = await xAutoClaimStale({
+    // 1. Recover stuck messages (PEL drain) - MUST be done before xReadGroup
+    // xReadGroup with ">" will NEVER give PEL messages, so we must drain them first
+    const stale = await xAutoClaimStale({
       consumerGroup: REGION_ID,
       workerId: WORKER_ID,
-      minIdleMs: 60_000, // only claim messages idle for at least 60s
-      count: 50,
+      minIdleMs: 60_000, // 1 min
+      count: 10,
     });
 
-    if (pendingBatch.length === 0) {
-      break;
-    }
+    if (stale.length > 0) {
+      console.warn(
+        `[Worker] Recovered ${stale.length} stale message(s) from PEL`,
+      );
 
-    const pendingResults = await Promise.allSettled(
-      pendingBatch.map((message) =>
-        checkWebsite(message.event.url, message.event.id),
-      ),
-    );
+      // Validate websites before processing stale messages
+      const validStale: typeof stale = [];
+      const invalidStaleIds: string[] = [];
 
-    const successfulPending: { streamId: string; event: UptimeEventRecord }[] =
-      [];
-    for (let i = 0; i < pendingResults.length; i++) {
-      const result = pendingResults[i];
-      const message = pendingBatch[i];
-      if (!message) continue;
-      if (result?.status === "fulfilled") {
-        successfulPending.push({ streamId: message.id, event: result.value });
-      } else {
-        console.error(
-          `[Worker] Failed to check website for pending message ${message.id}`,
-          result?.reason,
-        );
+      for (const message of stale) {
+        const website = await prismaClient.website.findUnique({
+          where: { id: message.event.id },
+        });
+
+        if (!website || !website.isActive) {
+          // ACK deleted/invalid websites immediately to prevent PEL clog
+          invalidStaleIds.push(message.id);
+          continue;
+        }
+
+        validStale.push(message);
       }
-    }
 
-    try {
-      if (successfulPending.length > 0) {
-        await recordUptimeEvents(successfulPending.map((s) => s.event));
-        console.log(
-          `[Worker] Replayed ${successfulPending.length} pending uptime check(s) to ClickHouse`,
-        );
-
+      // ACK invalid messages immediately
+      if (invalidStaleIds.length > 0) {
         await xAckBulk({
           consumerGroup: REGION_ID,
-          eventIds: successfulPending.map((s) => s.streamId),
+          eventIds: invalidStaleIds,
         });
+        console.log(
+          `[Worker] ACKed ${invalidStaleIds.length} invalid/deleted website message(s)`,
+        );
       }
-    } catch (error) {
-      console.error("[Worker] Failed to persist pending uptime batch", error);
-      // Intentionally do not break; on the next startup we'll retry draining.
-    }
-  }
 
-  while (true) {
-    const response = await xReadGroup({
+      // Process valid stale messages
+      if (validStale.length > 0) {
+        const staleResults = await Promise.allSettled(
+          validStale.map((message) =>
+            checkWebsite(message.event.url, message.event.id),
+          ),
+        );
+
+        const successfulStale: {
+          streamId: string;
+          event: UptimeEventRecord;
+        }[] = [];
+        for (let i = 0; i < staleResults.length; i++) {
+          const result = staleResults[i];
+          const message = validStale[i];
+          if (!message) continue;
+          if (result?.status === "fulfilled") {
+            successfulStale.push({ streamId: message.id, event: result.value });
+          } else {
+            console.error(
+              `[Worker] Failed to check website for stale message ${message.id}`,
+              result?.reason,
+            );
+          }
+        }
+
+        try {
+          if (successfulStale.length > 0) {
+            await recordUptimeEvents(successfulStale.map((s) => s.event));
+            console.log(
+              `[Worker] Replayed ${successfulStale.length} stale uptime check(s) to ClickHouse`,
+            );
+
+            await xAckBulk({
+              consumerGroup: REGION_ID,
+              eventIds: successfulStale.map((s) => s.streamId),
+            });
+          }
+        } catch (error) {
+          console.error("[Worker] Failed to persist stale uptime batch", error);
+        }
+      }
+    }
+
+    // 2. Then read fresh messages
+    const fresh = await xReadGroup({
       consumerGroup: REGION_ID,
       workerId: WORKER_ID,
     });
 
     // Process messages if any were received
-    if (response.length > 0) {
-      const results = await Promise.allSettled(
-        response.map((message) =>
-          checkWebsite(message.event.url, message.event.id),
-        ),
-      );
+    if (fresh.length > 0) {
+      // Validate websites before processing fresh messages
+      const validFresh: typeof fresh = [];
+      const invalidFreshIds: string[] = [];
 
-      const successful: { streamId: string; event: UptimeEventRecord }[] = [];
-      for (let i = 0; i < results.length; i++) {
-        const result = results[i];
-        const message = response[i];
-        if (!message) continue;
-        if (result?.status === "fulfilled") {
-          successful.push({ streamId: message.id, event: result.value });
-        } else {
-          console.error(
-            `[Worker] Failed to check website for message ${message.id}`,
-            result?.reason,
-          );
+      for (const message of fresh) {
+        const website = await prismaClient.website.findUnique({
+          where: { id: message.event.id },
+        });
+
+        if (!website || !website.isActive) {
+          // ACK deleted/invalid websites immediately to prevent PEL clog
+          invalidFreshIds.push(message.id);
+          continue;
         }
+
+        validFresh.push(message);
       }
 
-      try {
-        // Persist immutable uptime events to ClickHouse (single source of truth)
-        await recordUptimeEvents(successful.map((s) => s.event));
-        console.log(
-          `[Worker] Recorded ${successful.length} uptime check(s) to ClickHouse`,
-        );
-
-        // Ack back to the queue only after ClickHouse persistence succeeds
+      // ACK invalid messages immediately
+      if (invalidFreshIds.length > 0) {
         await xAckBulk({
           consumerGroup: REGION_ID,
-          eventIds: successful.map((s) => s.streamId),
+          eventIds: invalidFreshIds,
         });
-      } catch (error) {
-        console.error("[Worker] Failed to persist uptime batch", error);
+        console.log(
+          `[Worker] ACKed ${invalidFreshIds.length} invalid/deleted website message(s)`,
+        );
+      }
+
+      // Process valid fresh messages
+      if (validFresh.length > 0) {
+        const results = await Promise.allSettled(
+          validFresh.map((message) =>
+            checkWebsite(message.event.url, message.event.id),
+          ),
+        );
+
+        const successful: { streamId: string; event: UptimeEventRecord }[] = [];
+        for (let i = 0; i < results.length; i++) {
+          const result = results[i];
+          const message = validFresh[i];
+          if (!message) continue;
+          if (result?.status === "fulfilled") {
+            successful.push({ streamId: message.id, event: result.value });
+          } else {
+            console.error(
+              `[Worker] Failed to check website for message ${message.id}`,
+              result?.reason,
+            );
+          }
+        }
+
+        try {
+          // Persist immutable uptime events to ClickHouse (single source of truth)
+          await recordUptimeEvents(successful.map((s) => s.event));
+          console.log(
+            `[Worker] Recorded ${successful.length} uptime check(s) to ClickHouse`,
+          );
+
+          // Ack back to the queue only after ClickHouse persistence succeeds
+          await xAckBulk({
+            consumerGroup: REGION_ID,
+            eventIds: successful.map((s) => s.streamId),
+          });
+        } catch (error) {
+          console.error("[Worker] Failed to persist uptime batch", error);
+        }
       }
     }
 
