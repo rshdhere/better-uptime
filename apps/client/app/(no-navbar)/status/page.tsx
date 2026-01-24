@@ -105,6 +105,7 @@ export default function StatusPage() {
         label: "Unknown",
         className: "bg-muted text-muted-foreground",
         tooltip: "No checks recorded yet",
+        isUp: false,
       };
     }
 
@@ -118,13 +119,15 @@ export default function StatusPage() {
 
     if (currentStatus.status === "UP") {
       return {
-        label: "Up",
-        className: "bg-primary/10 text-primary",
+        label: "All systems operational",
+        className:
+          "rounded-full border border-gray-200 py-1 pl-1 pr-2 dark:border-gray-800",
         tooltip: `Up since ${formattedTime}${
           currentStatus.responseTimeMs
             ? ` • ${currentStatus.responseTimeMs}ms`
             : ""
         }`,
+        isUp: true, // Flag to indicate this needs special rendering with green dot
       };
     }
 
@@ -132,6 +135,7 @@ export default function StatusPage() {
       label: "Down",
       className: "bg-destructive/10 text-destructive",
       tooltip: `Down since ${formattedTime}`,
+      isUp: false,
     };
   };
 
@@ -637,7 +641,7 @@ export default function StatusPage() {
             <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 p-1">
               <button
                 onClick={() => setViewMode("per-check")}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   viewMode === "per-check"
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
@@ -647,7 +651,7 @@ export default function StatusPage() {
               </button>
               <button
                 onClick={() => setViewMode("per-day")}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   viewMode === "per-day"
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
@@ -711,13 +715,30 @@ export default function StatusPage() {
                         </a>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div
-                          className={`flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium ${badge.className}`}
-                          title={badge.tooltip}
-                        >
-                          <span className="inline-block size-2 rounded-full bg-current" />
-                          <span>{badge.label}</span>
-                        </div>
+                        {badge.isUp ? (
+                          <div
+                            className={badge.className}
+                            title={badge.tooltip}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <div className="relative size-4 shrink-0">
+                                <div className="absolute inset-[1px] rounded-full bg-emerald-500/20 dark:bg-emerald-600/20" />
+                                <div className="absolute inset-1 rounded-full bg-emerald-600 dark:bg-emerald-500" />
+                              </div>
+                              <span className="text-xs text-gray-700 dark:text-gray-50">
+                                {badge.label}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            className={`flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium ${badge.className}`}
+                            title={badge.tooltip}
+                          >
+                            <span className="inline-block size-2 rounded-full bg-current" />
+                            <span>{badge.label}</span>
+                          </div>
+                        )}
                         {hasData && (
                           <div className="text-sm text-muted-foreground">
                             {viewMode === "per-day"

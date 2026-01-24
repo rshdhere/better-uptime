@@ -139,7 +139,17 @@ export default function DashboardPage() {
   // While we decide if the user is authed, keep UI minimal to avoid a flash.
   if (!token) {
     return (
-      <div className="mx-auto w-full max-w-5xl px-4 pt-28 pb-16">
+      <div className="relative mx-auto w-full max-w-5xl px-4 pt-28 pb-16">
+        {/* Left diagonal stripe border */}
+        <div
+          className="diagonal-stripes pointer-events-none absolute -top-28 -bottom-16 -left-5 hidden w-5 lg:block"
+          aria-hidden="true"
+        />
+        {/* Right diagonal stripe border */}
+        <div
+          className="diagonal-stripes pointer-events-none absolute -top-28 -bottom-16 -right-5 hidden w-5 lg:block"
+          aria-hidden="true"
+        />
         <div className="rounded-2xl border border-border bg-card p-6 text-card-foreground">
           <div className="text-sm text-muted-foreground">
             Redirecting to{" "}
@@ -163,7 +173,17 @@ export default function DashboardPage() {
     : null;
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 pt-8 pb-16">
+    <div className="relative mx-auto w-full max-w-5xl px-4 pt-28 pb-16">
+      {/* Left diagonal stripe border */}
+      <div
+        className="diagonal-stripes pointer-events-none absolute -top-28 -bottom-16 -left-5 hidden w-5 lg:block"
+        aria-hidden="true"
+      />
+      {/* Right diagonal stripe border */}
+      <div
+        className="diagonal-stripes pointer-events-none absolute -top-28 -bottom-16 -right-5 hidden w-5 lg:block"
+        aria-hidden="true"
+      />
       {/* Breadcrumb Navigation */}
       <Breadcrumb className="mb-6">
         <BreadcrumbList>
