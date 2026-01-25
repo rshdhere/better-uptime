@@ -1,0 +1,21 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+RUN npm install -g pnpm@9.0.0
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/config/package.json ./packages/config/
+COPY packages/store/package.json ./packages/store/
+COPY packages/ui/package.json ./packages/ui/
+COPY apps/client/package.json ./apps/client/
+
+RUN pnpm install
+
+COPY . .
+
+WORKDIR /app/apps/client
+
+EXPOSE 3000
+
+CMD ["pnpm", "run", "dev"]

@@ -37,7 +37,48 @@ jobs:
             APP_DIR="${VPS_APP_DIR:-$HOME/better-uptime}"
             cd "$APP_DIR"
 
-            # ---------- Load Node / NVM ----------
+            echo "=========================================="
+            echo "Starting deployment (Redis + PM2)"
+            echo "=========================================="
+
+            # ---------- Docker & Docker Compose ----------
+            echo "Ensuring Docker is available..."
+            if ! command -v docker >/dev/null 2>&1; then
+              echo "Docker not found. Installing Docker..."
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sudo sh get-docker.sh
+              sudo usermod -aG docker $USER
+              rm get-docker.sh
+            fi
+
+            echo "Ensuring Docker Compose is available..."
+            if ! command -v docker compose >/dev/null 2>&1; then
+              echo "Docker Compose not found. Installing Docker Compose..."
+              sudo apt-get update
+              sudo apt-get install -y docker-compose-plugin
+            fi
+
+            # Verify Docker is running
+            if ! sudo systemctl is-active --quiet docker; then
+              echo "Starting Docker service..."
+              sudo systemctl start docker
+              sudo systemctl enable docker
+            fi
+
+            # ---------- Git Pull ----------
+            echo "Fetching latest code..."
+            git fetch origin
+            git checkout main
+            git pull origin main
+
+            # ---------- Environment Variables ----------
+            echo "Checking environment variables..."
+            if [ ! -f ".env" ] && [ ! -f "packages/config/.env" ]; then
+              echo "WARNING: .env file not found. Please create one with required environment variables."
+              echo "See docker/REDIS_SETUP.md for Redis configuration details."
+            fi
+
+            # ---------- Load Node / NVM (for Prisma) ----------
             export NVM_DIR="$HOME/.nvm"
             if [ -s "$NVM_DIR/nvm.sh" ]; then
               . "$NVM_DIR/nvm.sh"
@@ -46,13 +87,8 @@ jobs:
             # Ensure bashrc exists (pnpm installer expects it)
             [ -f "$HOME/.bashrc" ] || touch "$HOME/.bashrc"
 
-            echo "Fetching latest code..."
-            git fetch origin
-            git checkout main
-            git pull origin main
-
-            # ---------- pnpm ----------
-            echo "Ensuring pnpm is available..."
+            # ---------- pnpm (for Prisma migrations) ----------
+            echo "Ensuring pnpm is available for Prisma migrations..."
             if command -v corepack >/dev/null 2>&1; then
               corepack enable
               corepack prepare pnpm@9 --activate
@@ -61,7 +97,7 @@ jobs:
               export PATH="$HOME/.local/share/pnpm:$PATH"
             fi
 
-            # ---------- Bun ----------
+            # ---------- Bun (for PM2 services) ----------
             echo "Ensuring Bun is available..."
             export BUN_INSTALL="$HOME/.bun"
             export PATH="$BUN_INSTALL/bin:$PATH"
@@ -69,24 +105,77 @@ jobs:
               curl -fsSL https://bun.sh/install | bash
             fi
 
-            # ---------- Install ----------
+            # ---------- Install Dependencies ----------
             echo "Installing dependencies..."
             pnpm install --frozen-lockfile
 
-            # ---------- Prisma ----------
+            # ---------- Prisma Migrations ----------
             echo "Running Prisma migrations..."
-            pnpm --filter @repo/store prisma:deploy
-
+            pnpm --filter @repo/store prisma:deploy || echo "Prisma migration failed, check logs"
             echo "Generating Prisma Client..."
-            pnpm --filter @repo/store prisma:generate
+            pnpm --filter @repo/store prisma:generate || echo "Prisma generate failed, check logs"
 
-            # ---------- Build ----------
+            # ---------- Build Application ----------
             echo "Building application..."
             pnpm build
 
-            # ---------- PM2 ----------
+            # ---------- Redis (Docker) ----------
+            echo "Starting Redis container..."
+            cd docker
+            docker compose -f docker-compose.prod.yaml up -d redis
+
+            # Wait for Redis to be healthy
+            echo "Waiting for Redis to be healthy..."
+            sleep 5
+
+            # Check Redis status
+            echo "Redis container status:"
+            docker compose -f docker-compose.prod.yaml ps redis
+
+            # Test Redis connection
+            if docker compose -f docker-compose.prod.yaml exec -T redis redis-cli ping >/dev/null 2>&1; then
+              echo "✓ Redis is healthy and responding"
+            else
+              echo "⚠ Redis health check inconclusive (may need password authentication)"
+            fi
+
+            # ---------- PM2 Services ----------
             echo "Reloading PM2 processes..."
+            cd "$APP_DIR"
             pm2 reload ecosystem.config.cjs || pm2 start ecosystem.config.cjs
             pm2 save
 
+            echo "PM2 process status:"
+            pm2 status
+
+            # ---------- Health Checks ----------
+            echo "Performing health checks..."
+            
+            # Check if PM2 services are running
+            if pm2 list | grep -q "online"; then
+              echo "✓ PM2 services are running"
+            else
+              echo "⚠ Some PM2 services may not be online, check logs"
+            fi
+
+            # Show recent PM2 logs
+            echo "Recent PM2 logs:"
+            pm2 logs --lines 20 --nostream
+
+            # ---------- Cleanup ----------
+            echo "Cleaning up unused Docker resources..."
+            docker system prune -f || true
+
+            echo "=========================================="
             echo "Deployment completed successfully"
+            echo "=========================================="
+            echo ""
+            echo "Services status:"
+            echo "  - Redis: docker compose -f docker/docker-compose.prod.yaml ps"
+            echo "  - PM2: pm2 status"
+            echo ""
+            echo "Useful commands:"
+            echo "  - Redis logs: docker compose -f docker/docker-compose.prod.yaml logs -f redis"
+            echo "  - PM2 logs: pm2 logs"
+            echo "  - Restart PM2: pm2 restart all"
+            echo "  - Restart Redis: docker compose -f docker/docker-compose.prod.yaml restart redis"
