@@ -119,45 +119,9 @@ jobs:
             echo "Building application..."
             pnpm build
 
-            # ---------- Redis (Docker) ----------
-            echo "Starting Redis container..."
-            cd docker
-            
-            # Clean up any stale containers/networks first
-            echo "Cleaning up any stale Docker resources..."
-            docker compose -f docker-compose.prod.yaml down --remove-orphans 2>/dev/null || true
-            
-            # Remove any orphaned networks that might cause issues
-            docker network prune -f || true
-            
-            # Start Redis container
-            echo "Starting Redis container..."
-            docker compose -f docker-compose.prod.yaml up -d redis --remove-orphans
-            
-            # Verify container started
-            echo "Checking if Redis container started..."
-            sleep 2
-            if ! docker ps -a | grep -q "better-uptime-redis"; then
-              echo "❌ ERROR: Redis container failed to start"
-              echo "Checking Docker logs..."
-              docker compose -f docker-compose.prod.yaml logs redis || true
-              exit 1
-            fi
-            
-            # Check if container is running (not exited)
-            if docker ps | grep -q "better-uptime-redis"; then
-              echo "✓ Redis container is running"
-            else
-              echo "⚠ WARNING: Redis container exists but may not be running"
-              echo "Container status:"
-              docker ps -a | grep "better-uptime-redis" || true
-              echo "Redis container logs:"
-              docker compose -f docker-compose.prod.yaml logs redis || docker logs better-uptime-redis || true
-            fi
+            # ---------- Redis (Manual/External) ----------
+            echo "Verifying Redis connection (using manually managed Redis instance)..."
 
-            # Wait for Redis to accept connections (CRITICAL: PM2 must wait)
-            echo "Waiting for Redis to accept connections..."
-            
             # Install redis-tools if not available (for health check)
             if ! command -v redis-cli >/dev/null 2>&1; then
               echo "Installing redis-tools for health check..."
@@ -165,27 +129,41 @@ jobs:
               sudo apt-get install -y redis-tools >/dev/null 2>&1 || true
             fi
 
-            # Get Redis password from .env if available (for health check)
+            # Get Redis connection details from .env
+            REDIS_HOST_ENV="localhost"
+            REDIS_PORT_ENV="6379"
             REDIS_PASSWORD_ENV=""
+
             if [ -f ".env" ]; then
-              REDIS_PASSWORD_ENV=$(grep "^REDIS_PASSWORD=" .env 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo "")
+              REDIS_HOST_ENV=$(grep "^REDIS_HOST=" .env 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | head -1 || echo "localhost")
+              REDIS_PORT_ENV=$(grep "^REDIS_PORT=" .env 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | head -1 || echo "6379")
+              REDIS_PASSWORD_ENV=$(grep "^REDIS_PASSWORD=" .env 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | head -1 || echo "")
             elif [ -f "packages/config/.env" ]; then
-              REDIS_PASSWORD_ENV=$(grep "^REDIS_PASSWORD=" packages/config/.env 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo "")
+              REDIS_HOST_ENV=$(grep "^REDIS_HOST=" packages/config/.env 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | head -1 || echo "localhost")
+              REDIS_PORT_ENV=$(grep "^REDIS_PORT=" packages/config/.env 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | head -1 || echo "6379")
+              REDIS_PASSWORD_ENV=$(grep "^REDIS_PASSWORD=" packages/config/.env 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | head -1 || echo "")
             fi
 
-            # Proper wait loop - ensures Redis is ready before PM2 starts
+            # Use defaults if empty
+            REDIS_HOST_ENV="${REDIS_HOST_ENV:-localhost}"
+            REDIS_PORT_ENV="${REDIS_PORT_ENV:-6379}"
+
+            echo "Connecting to Redis at ${REDIS_HOST_ENV}:${REDIS_PORT_ENV}..."
+
+            # Wait for Redis to accept connections (CRITICAL: PM2 must wait)
+            echo "Waiting for Redis to accept connections..."
             REDIS_READY=false
             for i in {1..20}; do
               # Try ping with password if available, otherwise without
               if [ -n "$REDIS_PASSWORD_ENV" ]; then
-                if redis-cli -h 127.0.0.1 -p 6379 -a "$REDIS_PASSWORD_ENV" ping >/dev/null 2>&1; then
-                  echo "✓ Redis is accepting connections (attempt $i)"
+                if redis-cli -h "$REDIS_HOST_ENV" -p "$REDIS_PORT_ENV" -a "$REDIS_PASSWORD_ENV" ping >/dev/null 2>&1; then
+                  echo "✓ Redis is accepting connections at ${REDIS_HOST_ENV}:${REDIS_PORT_ENV} (attempt $i)"
                   REDIS_READY=true
                   break
                 fi
               else
-                if redis-cli -h 127.0.0.1 -p 6379 ping >/dev/null 2>&1; then
-                  echo "✓ Redis is accepting connections (attempt $i)"
+                if redis-cli -h "$REDIS_HOST_ENV" -p "$REDIS_PORT_ENV" ping >/dev/null 2>&1; then
+                  echo "✓ Redis is accepting connections at ${REDIS_HOST_ENV}:${REDIS_PORT_ENV} (attempt $i)"
                   REDIS_READY=true
                   break
                 fi
@@ -195,13 +173,14 @@ jobs:
             done
 
             if [ "$REDIS_READY" = false ]; then
-              echo "⚠ WARNING: Redis may not be fully ready, but continuing..."
-              echo "⚠ Check Redis logs: docker compose -f docker/docker-compose.prod.yaml logs redis"
+              echo "ERROR: Cannot connect to Redis at ${REDIS_HOST_ENV}:${REDIS_PORT_ENV}"
+              echo "Please ensure Redis is running and accessible."
+              echo "Check Redis status: systemctl status redis (or redis-server)"
+              echo "Verify connection: redis-cli -h ${REDIS_HOST_ENV} -p ${REDIS_PORT_ENV} ping"
+              exit 1
             fi
 
-            # Check Redis container status
-            echo "Redis container status:"
-            docker compose -f docker-compose.prod.yaml ps redis
+            echo "✓ Redis connection verified successfully"
 
             # ---------- PM2 Services ----------
             echo "Reloading PM2 processes..."
@@ -214,7 +193,7 @@ jobs:
 
             # ---------- Health Checks ----------
             echo "Performing health checks..."
-            
+
             # Check if PM2 services are running
             if pm2 list | grep -q "online"; then
               echo "✓ PM2 services are running"
@@ -235,11 +214,11 @@ jobs:
             echo "=========================================="
             echo ""
             echo "Services status:"
-            echo "  - Redis: docker compose -f docker/docker-compose.prod.yaml ps"
+            echo "  - Redis: Using manually managed instance at ${REDIS_HOST_ENV}:${REDIS_PORT_ENV}"
             echo "  - PM2: pm2 status"
             echo ""
             echo "Useful commands:"
-            echo "  - Redis logs: docker compose -f docker/docker-compose.prod.yaml logs -f redis"
+            echo "  - Redis status: systemctl status redis (or redis-cli -h ${REDIS_HOST_ENV} -p ${REDIS_PORT_ENV} ping)"
             echo "  - PM2 logs: pm2 logs"
             echo "  - Restart PM2: pm2 restart all"
-            echo "  - Restart Redis: docker compose -f docker/docker-compose.prod.yaml restart redis"
+            echo "  - Restart Redis: systemctl restart redis (or your Redis management command)"
