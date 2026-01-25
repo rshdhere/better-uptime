@@ -234,3 +234,90 @@ export async function getRecentStatusEvents(
 
   return data;
 }
+
+/**
+ * Query status events for a list of website IDs within a date range
+ * Returns all status checks from the last N days per website
+ * This is more efficient than using a large limit when you need historical data
+ */
+export async function getStatusEventsByDays(
+  websiteIds: string[],
+  days: number = 30,
+): Promise<
+  Array<{
+    website_id: string;
+    region_id: string;
+    status: "UP" | "DOWN";
+    checked_at: string;
+    response_time_ms: number | null;
+    http_status_code: number | null;
+  }>
+> {
+  if (websiteIds.length === 0) {
+    return [];
+  }
+
+  try {
+    // Keep this bounded so a down ClickHouse doesn't hang the API.
+    await withTimeout(
+      ensureSchema(),
+      CLICKHOUSE_SCHEMA_TIMEOUT_MS,
+      "ClickHouse ensureSchema",
+    );
+  } catch {
+    return [];
+  }
+  const clickhouse = getClient();
+
+  // Escape website IDs for SQL injection safety
+  const escapedIds = websiteIds
+    .map((id) => `'${id.replace(/'/g, "''")}'`)
+    .join(",");
+
+  // Calculate the cutoff date (N days ago)
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+  // Format as ISO string for ClickHouse DateTime64
+  const cutoffDateISO = cutoffDate.toISOString();
+
+  // Query all events from the last N days
+  // This is more efficient than fetching a large number of rows when you need historical data
+  const query = `
+    SELECT 
+      website_id,
+      region_id,
+      status,
+      checked_at,
+      response_time_ms,
+      http_status_code
+    FROM ${CLICKHOUSE_METRICS_TABLE}
+    WHERE website_id IN (${escapedIds})
+      AND checked_at >= '${cutoffDateISO}'
+    ORDER BY website_id, checked_at DESC
+  `;
+
+  let result: Awaited<ReturnType<ClickHouseClient["query"]>>;
+  try {
+    result = await withTimeout(
+      clickhouse.query({
+        query,
+        format: "JSONEachRow",
+      }),
+      CLICKHOUSE_QUERY_TIMEOUT_MS,
+      "ClickHouse query",
+    );
+  } catch {
+    return [];
+  }
+
+  const data = (await result.json()) as Array<{
+    website_id: string;
+    region_id: string;
+    status: "UP" | "DOWN";
+    checked_at: string;
+    response_time_ms: number | null;
+    http_status_code: number | null;
+  }>;
+
+  return data;
+}

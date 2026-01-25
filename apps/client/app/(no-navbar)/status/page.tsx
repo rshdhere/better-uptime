@@ -297,6 +297,9 @@ export default function StatusPage() {
 
   // DAILY AGGREGATION: Group status events by calendar day and calculate downtime metrics.
   // Each day is represented as one tick in the tracker, showing overall health for that day.
+  // IMPORTANT: This function processes REAL data from ClickHouse only - no dummy/mock data.
+  // Each tick represents one calendar day (YYYY-MM-DD) in the configured timezone.
+  // All statusPoints come from ClickHouse via the backend API (getStatusEventsByDays).
   const buildDailyTrackerData = (
     statusPoints: Array<{
       status: "UP" | "DOWN";

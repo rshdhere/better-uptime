@@ -9,7 +9,7 @@ import {
 import { protectedProcedure, router } from "../trpc.js";
 import { prismaClient } from "@repo/store";
 import { TRPCError } from "@trpc/server";
-import { getRecentStatusEvents } from "@repo/clickhouse";
+import { getRecentStatusEvents, getStatusEventsByDays } from "@repo/clickhouse";
 import { xAddBulk } from "@repo/streams";
 
 export const websiteRouter = router({
@@ -206,13 +206,20 @@ export const websiteRouter = router({
       // Get website IDs
       const websiteIds = websites.map((w) => w.id);
 
-      // 2. Query ClickHouse for recent status events (last 90 checks per website).
-      // ClickHouse is the source of truth for status data.
+      // 2. Query ClickHouse for status events.
+      // IMPORTANT: Per-day view requires 30 days of data (one tick = one calendar day).
+      // Each day's tick aggregates all checks from that calendar day in the configured timezone.
+      // For per-check view, we need 90 checks (~4.5 hours with 3-minute intervals).
+      // To support both views, we fetch 30 days of data which covers both use cases.
+      // ClickHouse is the ONLY source of truth for status data - no dummy/mock data is used.
       // If ClickHouse is not configured/available, still return the websites with
       // empty statusPoints so the UI can render the collection.
-      let statusEvents: Awaited<ReturnType<typeof getRecentStatusEvents>> = [];
+      let statusEvents: Awaited<ReturnType<typeof getStatusEventsByDays>> = [];
       try {
-        statusEvents = await getRecentStatusEvents(websiteIds, 90);
+        // Fetch 30 days of data to support the per-day view (30 days = 30 ticks)
+        // This also provides enough data for the per-check view (90 minutes = ~4.5 hours)
+        // All data comes from ClickHouse - no dummy data is used
+        statusEvents = await getStatusEventsByDays(websiteIds, 30);
       } catch (error) {
         console.error(
           "[website.status] Failed to fetch status events from ClickHouse",
