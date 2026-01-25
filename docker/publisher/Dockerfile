@@ -5,9 +5,9 @@ WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/config/package.json ./packages/config/
-COPY packages/api/package.json ./packages/api/
 COPY packages/store/package.json ./packages/store/
-COPY apps/server/package.json ./apps/server/
+COPY packages/streams/package.json ./packages/streams/
+COPY apps/publisher/package.json ./apps/publisher/
 
 RUN npm install -g pnpm@9.0.0
 
@@ -15,13 +15,13 @@ RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
 WORKDIR /app
-    
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages ./packages
 COPY --from=deps /app/apps ./apps
 
 COPY packages ./packages
-COPY apps/server ./apps/server
+COPY apps/publisher ./apps/publisher
 COPY turbo.json ./
 COPY tsconfig.json ./
 
@@ -33,10 +33,8 @@ ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages ./packages
 
-COPY apps/server ./apps/server
+COPY apps/publisher ./apps/publisher
 
-WORKDIR /app/apps/server
+WORKDIR /app/apps/publisher
 
-EXPOSE 8084
-
-CMD ["bun", "run", "src/bin.ts"]
+CMD ["bun", "run", "src/index.ts"]

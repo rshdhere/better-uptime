@@ -1,0 +1,149 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: better-uptime-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data-dev:/data
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-dev-password}
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - better-uptime-network-dev
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend/Dockerfile.dev
+    container_name: better-uptime-backend-dev
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+      CLIENT_ID_GITHUB: ${CLIENT_ID_GITHUB}
+      CLIENT_SECRET_GITHUB: ${CLIENT_SECRET_GITHUB}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      BACKEND_PORT: ${BACKEND_PORT:-8084}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_USERNAME: ${REDIS_USERNAME:-default}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev-password}
+    ports:
+      - "${BACKEND_PORT:-8084}:8084"
+    volumes:
+      - ../apps/server:/app/apps/server
+      - ../packages:/app/packages
+      - /app/node_modules
+      - /app/apps/server/node_modules
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - better-uptime-network-dev
+    command: ["bun", "run", "--hot", "src/bin.ts"]
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend/Dockerfile.dev
+    container_name: better-uptime-frontend-dev
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8084}
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ../apps/client:/app/apps/client
+      - ../packages:/app/packages
+      - /app/node_modules
+      - /app/apps/client/node_modules
+      - /app/apps/client/.next
+    depends_on:
+      - backend
+    networks:
+      - better-uptime-network-dev
+    command: ["pnpm", "run", "dev"]
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/worker/Dockerfile.dev
+    container_name: better-uptime-worker-dev
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: ${DATABASE_URL}
+      REGION_ID: ${REGION_ID:-us-east-1}
+      WORKER_ID: ${WORKER_ID:-worker-1}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_USERNAME: ${REDIS_USERNAME:-default}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev-password}
+      CLICKHOUSE_URL: ${CLICKHOUSE_URL:-}
+      CLICKHOUSE_USERNAME: ${CLICKHOUSE_USERNAME:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-default}
+      CLICKHOUSE_METRICS_TABLE: ${CLICKHOUSE_METRICS_TABLE:-uptime_checks}
+    volumes:
+      - ../apps/worker:/app/apps/worker
+      - ../packages:/app/packages
+      - /app/node_modules
+      - /app/apps/worker/node_modules
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    networks:
+      - better-uptime-network-dev
+    command: ["bun", "run", "--hot", "src/index.ts"]
+    restart: unless-stopped
+
+  publisher:
+    build:
+      context: ..
+      dockerfile: docker/publisher/Dockerfile.dev
+    container_name: better-uptime-publisher-dev
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_USERNAME: ${REDIS_USERNAME:-default}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-dev-password}
+    volumes:
+      - ../apps/publisher:/app/apps/publisher
+      - ../packages:/app/packages
+      - /app/node_modules
+      - /app/apps/publisher/node_modules
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    networks:
+      - better-uptime-network-dev
+    command: ["bun", "run", "--hot", "src/index.ts"]
+    restart: unless-stopped
+
+volumes:
+  redis-data-dev:
+    driver: local
+
+networks:
+  better-uptime-network-dev:
+    driver: bridge

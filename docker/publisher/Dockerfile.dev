@@ -1,0 +1,19 @@
+FROM oven/bun:1
+
+WORKDIR /app
+
+RUN npm install -g pnpm@9.0.0
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/config/package.json ./packages/config/
+COPY packages/store/package.json ./packages/store/
+COPY packages/streams/package.json ./packages/streams/
+COPY apps/publisher/package.json ./apps/publisher/
+
+RUN pnpm install
+
+COPY . .
+
+WORKDIR /app/apps/publisher
+
+CMD ["bun", "run", "--hot", "src/index.ts"]

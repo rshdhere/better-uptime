@@ -1,0 +1,25 @@
+FROM oven/bun:1
+
+WORKDIR /app
+
+RUN npm install -g pnpm@9.0.0
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/config/package.json ./packages/config/
+COPY packages/api/package.json ./packages/api/
+COPY packages/store/package.json ./packages/store/
+COPY packages/streams/package.json ./packages/streams/
+COPY packages/clickhouse/package.json ./packages/clickhouse/
+COPY packages/validators/package.json ./packages/validators/
+COPY packages/ui/package.json ./packages/ui/
+COPY apps/server/package.json ./apps/server/
+
+RUN pnpm install
+
+COPY . .
+
+WORKDIR /app/apps/server
+
+EXPOSE 8084
+
+CMD ["bun", "run", "--hot", "src/bin.ts"]
