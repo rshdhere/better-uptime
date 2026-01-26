@@ -91,151 +91,8 @@ async function startWorker() {
 
   // WORKER SELF-LIVENESS WATCHDOG:
   // Track last successful ClickHouse write to detect worker stalls
-  // If no writes occur for >10 minutes, log CRITICAL (but don't crash)
-  // PM2 can handle restarts if configured - we just alert
+  // If no writes occur for >15 minutes, exit with code 1 so PM2 can restart
   let lastSuccessfulWriteAt: number | null = null;
-  let livenessCriticalLoggedAt: number | null = null;
-
-  // CRITICAL: Periodic PEL auto-heal - reclaims stuck messages every 45 seconds
-  // This prevents PEL growth and ensures messages are never permanently stuck
-  // Messages idle > 2 minutes (120s) are reclaimed and reprocessed
-  // NON-BLOCKING: Max 200 messages per cycle to prevent starving XREADGROUP
-  setInterval(async () => {
-    try {
-      const reclaimed = await xAutoClaimStale({
-        consumerGroup: REGION_ID,
-        workerId: WORKER_ID,
-        minIdleMs: 120_000, // 2 minutes - reclaim messages idle > 2 mins
-        count: 50, // Process up to 50 reclaimed messages per batch
-        maxTotalReclaim: 200, // Max 200 messages per cycle to prevent blocking
-      });
-
-      if (reclaimed.length > 0) {
-        console.log(
-          `[Worker] PEL Auto-heal: Reclaimed ${reclaimed.length} stale message(s)`,
-        );
-
-        // Process reclaimed messages
-        const validReclaimed: typeof reclaimed = [];
-        const invalidReclaimedIds: string[] = [];
-
-        for (const message of reclaimed) {
-          const website = await prismaClient.website.findUnique({
-            where: { id: message.event.id },
-          });
-
-          if (!website || !website.isActive) {
-            invalidReclaimedIds.push(message.id);
-            continue;
-          }
-
-          validReclaimed.push(message);
-        }
-
-        // ACK invalid messages immediately
-        if (invalidReclaimedIds.length > 0) {
-          await xAckBulk({
-            consumerGroup: REGION_ID,
-            eventIds: invalidReclaimedIds,
-          });
-          console.log(
-            `[Worker] ACKed ${invalidReclaimedIds.length} invalid/deleted website message(s) from PEL`,
-          );
-        }
-
-        // Process valid reclaimed messages
-        if (validReclaimed.length > 0) {
-          const results = await Promise.allSettled(
-            validReclaimed.map((message) =>
-              checkWebsite(message.event.url, message.event.id),
-            ),
-          );
-
-          const successfulReclaimed: {
-            streamId: string;
-            event: UptimeEventRecord;
-          }[] = [];
-          const failedReclaimedIds: string[] = [];
-
-          for (let i = 0; i < results.length; i++) {
-            const result = results[i];
-            const message = validReclaimed[i];
-            if (!message) continue;
-
-            if (result?.status === "fulfilled") {
-              successfulReclaimed.push({
-                streamId: message.id,
-                event: result.value,
-              });
-            } else {
-              console.error(
-                `[Worker] Failed to check website for reclaimed message ${message.id}`,
-                result?.reason,
-              );
-              failedReclaimedIds.push(message.id);
-            }
-          }
-
-          // RETRY SEMANTICS:
-          // - Failed checks are ACKed to prevent PEL growth
-          // - Retry happens via publisher re-enqueue (every 3 mins), NOT Redis retry
-          // - ClickHouse is the source of truth - failed checks don't block PEL
-          // - This ensures PEL never grows unbounded even if checks fail
-          try {
-            if (successfulReclaimed.length > 0) {
-              await recordUptimeEvents(successfulReclaimed.map((s) => s.event));
-              // Update last successful write timestamp for liveness watchdog
-              lastSuccessfulWriteAt = Date.now();
-              livenessCriticalLoggedAt = null; // Reset critical log on successful write
-              console.log(
-                `[Worker] Replayed ${successfulReclaimed.length} reclaimed uptime check(s) to ClickHouse`,
-              );
-            }
-
-            // ACK all reclaimed messages regardless of success/failure
-            // Failed checks will be retried by publisher on next cycle (3 mins)
-            const allReclaimedIds = [
-              ...successfulReclaimed.map((s) => s.streamId),
-              ...failedReclaimedIds,
-            ];
-            if (allReclaimedIds.length > 0) {
-              await xAckBulk({
-                consumerGroup: REGION_ID,
-                eventIds: allReclaimedIds,
-              });
-            }
-          } catch (error) {
-            console.error(
-              "[Worker] Failed to persist/ACK reclaimed uptime batch",
-              error,
-            );
-            // Even if ClickHouse fails, try to ACK to prevent PEL growth
-            // Failed checks will be retried by publisher on next cycle
-            const allReclaimedIds = [
-              ...successfulReclaimed.map((s) => s.streamId),
-              ...failedReclaimedIds,
-            ];
-            if (allReclaimedIds.length > 0) {
-              try {
-                await xAckBulk({
-                  consumerGroup: REGION_ID,
-                  eventIds: allReclaimedIds,
-                });
-              } catch (ackError) {
-                console.error(
-                  "[Worker] Failed to ACK reclaimed messages after ClickHouse error:",
-                  ackError,
-                );
-              }
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error("[Worker] PEL auto-heal failed:", error);
-      // Don't throw - allow next cycle to retry
-    }
-  }, 45 * 1000); // Every 45 seconds
 
   // PEL monitoring - self-healing, not noisy
   // Only log CRITICAL if pending > 0 for >10 minutes to avoid log spam
@@ -279,8 +136,7 @@ async function startWorker() {
 
   // WORKER SELF-LIVENESS WATCHDOG:
   // Monitor last successful ClickHouse write to detect worker stalls
-  // If no writes for >10 minutes, log CRITICAL (but don't crash)
-  // PM2 can handle restarts if configured - we just alert
+  // If no writes for >15 minutes, exit with code 1 so PM2 can restart
   setInterval(
     () => {
       if (lastSuccessfulWriteAt === null) {
@@ -291,158 +147,167 @@ async function startWorker() {
       const timeSinceLastWrite = Date.now() - lastSuccessfulWriteAt;
       const timeSinceLastWriteMinutes = Math.floor(timeSinceLastWrite / 60_000);
 
-      // CRITICAL: Log if no writes for >10 minutes
-      if (timeSinceLastWrite > 600_000) {
-        // 10 minutes
-        const now = Date.now();
-        // Only log once per 10-minute window to avoid spam
-        if (
-          livenessCriticalLoggedAt === null ||
-          now - livenessCriticalLoggedAt > 600_000
-        ) {
-          console.error(
-            `[Worker] LIVENESS CRITICAL: No ClickHouse writes for ${timeSinceLastWriteMinutes} minutes. Worker may be stalled. PM2 can restart if configured.`,
-          );
-          livenessCriticalLoggedAt = now;
-        }
+      // CRITICAL: Exit if no writes for >15 minutes (hard liveness escape hatch)
+      if (timeSinceLastWrite > 900_000) {
+        // 15 minutes
+        console.error(
+          `[Worker] LIVENESS CRITICAL: No ClickHouse writes for ${timeSinceLastWriteMinutes} minutes. Worker appears stalled. Exiting to allow PM2 restart.`,
+        );
+        // eslint-disable-next-line no-undef
+        process.exit(1);
       }
-      // DO NOT crash - let PM2 handle restarts if configured
-      // System continues running to allow recovery
     },
     2 * 60 * 1000,
   ); // Check every 2 minutes
 
+  // Helper function to process messages (used for both fresh and reclaimed)
+  async function processMessages(
+    messages: Awaited<ReturnType<typeof xReadGroup>>,
+    isReclaimed: boolean = false,
+  ): Promise<void> {
+    if (messages.length === 0) {
+      return;
+    }
+
+    const logPrefix = isReclaimed ? "PEL Reclaim" : "Fresh";
+    console.log(
+      `[Worker] ${logPrefix}: Processing ${messages.length} message(s)`,
+    );
+
+    // Validate websites before processing
+    const validMessages: typeof messages = [];
+    const invalidMessageIds: string[] = [];
+
+    for (const message of messages) {
+      const website = await prismaClient.website.findUnique({
+        where: { id: message.event.id },
+      });
+
+      if (!website || !website.isActive) {
+        invalidMessageIds.push(message.id);
+        continue;
+      }
+
+      validMessages.push(message);
+    }
+
+    // ACK invalid messages immediately
+    if (invalidMessageIds.length > 0) {
+      await xAckBulk({
+        consumerGroup: REGION_ID,
+        eventIds: invalidMessageIds,
+      });
+      console.log(
+        `[Worker] ${logPrefix}: ACKed ${invalidMessageIds.length} invalid/deleted website message(s)`,
+      );
+    }
+
+    // Process valid messages
+    if (validMessages.length > 0) {
+      const results = await Promise.allSettled(
+        validMessages.map((message) =>
+          checkWebsite(message.event.url, message.event.id),
+        ),
+      );
+
+      const successful: { streamId: string; event: UptimeEventRecord }[] = [];
+      const failedIds: string[] = [];
+
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        const message = validMessages[i];
+        if (!message) continue;
+
+        if (result?.status === "fulfilled") {
+          successful.push({ streamId: message.id, event: result.value });
+        } else {
+          console.error(
+            `[Worker] ${logPrefix}: Failed to check website for message ${message.id}`,
+            result?.reason,
+          );
+          failedIds.push(message.id);
+        }
+      }
+
+      // CRITICAL: ACK ALL messages in finally block, regardless of success/failure
+      // This ensures no message is left un-ACKed, preventing PEL growth
+      const allMessageIds = [
+        ...successful.map((s) => s.streamId),
+        ...failedIds,
+      ];
+
+      try {
+        // Persist immutable uptime events to ClickHouse (single source of truth)
+        if (successful.length > 0) {
+          await recordUptimeEvents(successful.map((s) => s.event));
+          // Update last successful write timestamp for liveness watchdog
+          lastSuccessfulWriteAt = Date.now();
+          const action = isReclaimed ? "Replayed" : "Recorded";
+          console.log(
+            `[Worker] ${action} ${successful.length} uptime check(s) to ClickHouse`,
+          );
+        }
+      } catch (error) {
+        console.error(
+          `[Worker] ${logPrefix}: Failed to persist uptime batch`,
+          error,
+        );
+        // Continue to ACK even if ClickHouse fails - prevents PEL growth
+        // Failed checks will be retried on next publisher cycle
+      } finally {
+        // CRITICAL: ACK ALL messages (successful and failed) in finally block
+        // This ensures messages are always ACKed even if:
+        // - HTTP check fails
+        // - ClickHouse insert fails
+        // - Any exception is thrown
+        if (allMessageIds.length > 0) {
+          try {
+            await xAckBulk({
+              consumerGroup: REGION_ID,
+              eventIds: allMessageIds,
+            });
+          } catch (ackError) {
+            // Log ACK failures but don't throw - message will be reclaimed by PEL reclaim
+            // Redis disconnects are handled gracefully - operation will retry
+            console.error(
+              `[Worker] ${logPrefix}: Failed to ACK messages (will be reclaimed by PEL reclaim):`,
+              ackError,
+            );
+          }
+        }
+      }
+    }
+  }
+
   while (true) {
     try {
-      // 2. Read fresh messages (PEL auto-heal is now handled by periodic interval above)
+      // 1. Read fresh messages first (always prioritize fresh over PEL)
       const fresh = await xReadGroup({
         consumerGroup: REGION_ID,
         workerId: WORKER_ID,
       });
 
-      // Process messages if any were received
+      // Process fresh messages if any were received
       if (fresh.length > 0) {
-        // Validate websites before processing fresh messages
-        const validFresh: typeof fresh = [];
-        const invalidFreshIds: string[] = [];
+        await processMessages(fresh, false);
+        // Continue loop immediately to check for more fresh messages
+        continue;
+      }
 
-        for (const message of fresh) {
-          const website = await prismaClient.website.findUnique({
-            where: { id: message.event.id },
-          });
+      // 2. ONLY if no fresh messages: attempt PEL reclaim (repair-only)
+      // This ensures fresh messages always have priority and prevents PEL dominance
+      const reclaimed = await xAutoClaimStale({
+        consumerGroup: REGION_ID,
+        workerId: WORKER_ID,
+        minIdleMs: 300_000, // 5 minutes - reclaim messages idle > 5 mins
+        count: 10, // Process up to 10 reclaimed messages per batch
+        maxTotalReclaim: 20, // Max 20 messages per cycle to prevent blocking
+      });
 
-          if (!website || !website.isActive) {
-            // ACK deleted/invalid websites immediately to prevent PEL clog
-            invalidFreshIds.push(message.id);
-            continue;
-          }
-
-          validFresh.push(message);
-        }
-
-        // ACK invalid messages immediately
-        if (invalidFreshIds.length > 0) {
-          await xAckBulk({
-            consumerGroup: REGION_ID,
-            eventIds: invalidFreshIds,
-          });
-          console.log(
-            `[Worker] ACKed ${invalidFreshIds.length} invalid/deleted website message(s)`,
-          );
-        }
-
-        // Process valid fresh messages
-        if (validFresh.length > 0) {
-          const results = await Promise.allSettled(
-            validFresh.map((message) =>
-              checkWebsite(message.event.url, message.event.id),
-            ),
-          );
-
-          const successful: { streamId: string; event: UptimeEventRecord }[] =
-            [];
-          const failedIds: string[] = [];
-
-          for (let i = 0; i < results.length; i++) {
-            const result = results[i];
-            const message = validFresh[i];
-            if (!message) continue;
-
-            if (result?.status === "fulfilled") {
-              successful.push({ streamId: message.id, event: result.value });
-            } else {
-              console.error(
-                `[Worker] Failed to check website for message ${message.id}`,
-                result?.reason,
-              );
-              failedIds.push(message.id);
-            }
-          }
-
-          // CRITICAL: ACK ALL messages in finally block, regardless of success/failure
-          // This ensures no message is left un-ACKed, preventing PEL growth
-          const allMessageIds = [
-            ...successful.map((s) => s.streamId),
-            ...failedIds,
-          ];
-
-          try {
-            // OBSERVABILITY: Why ClickHouse is the source of truth
-            // - Redis Streams are a transient queue, not storage
-            // - Streams are trimmed (MAXLEN ~8000) to prevent unbounded growth
-            // - Only ClickHouse retains full history for analytics and UI
-            // - Failed checks are ACKed from Redis but will be retried via publisher
-            //
-            // Persist immutable uptime events to ClickHouse (single source of truth)
-            if (successful.length > 0) {
-              await recordUptimeEvents(successful.map((s) => s.event));
-              // Update last successful write timestamp for liveness watchdog
-              lastSuccessfulWriteAt = Date.now();
-              livenessCriticalLoggedAt = null; // Reset critical log on successful write
-              console.log(
-                `[Worker] Recorded ${successful.length} uptime check(s) to ClickHouse`,
-              );
-            }
-          } catch (error) {
-            console.error("[Worker] Failed to persist uptime batch", error);
-            // Continue to ACK even if ClickHouse fails - prevents PEL growth
-            // Failed checks will be retried on next publisher cycle
-          } finally {
-            // OBSERVABILITY: Why failed checks are ACKed
-            // - Failed HTTP checks are ACKed to prevent PEL growth
-            // - PEL growth would cause memory issues and require manual Redis intervention
-            // - Publisher re-enqueues all active websites every 3 minutes
-            // - Failed checks will be retried automatically on next publisher cycle
-            // - This ensures system continues running even if some checks fail
-            //
-            // OBSERVABILITY: Why retries happen via publisher, not Redis
-            // - Redis Streams are a transient queue, not a retry mechanism
-            // - Publisher is the source of truth for what should be checked
-            // - Publisher re-enqueues based on database state (isActive websites)
-            // - This allows dynamic website activation/deactivation without Redis cleanup
-            //
-            // CRITICAL: ACK ALL messages (successful and failed) in finally block
-            // This ensures messages are always ACKed even if:
-            // - HTTP check fails
-            // - ClickHouse insert fails
-            // - Any exception is thrown
-            if (allMessageIds.length > 0) {
-              try {
-                await xAckBulk({
-                  consumerGroup: REGION_ID,
-                  eventIds: allMessageIds,
-                });
-              } catch (ackError) {
-                // Log ACK failures but don't throw - message will be reclaimed by PEL auto-heal
-                // Redis disconnects are handled gracefully - operation will retry
-                console.error(
-                  "[Worker] Failed to ACK messages (will be reclaimed by PEL auto-heal):",
-                  ackError,
-                );
-              }
-            }
-          }
-        }
+      if (reclaimed.length > 0) {
+        await processMessages(reclaimed, true);
+        // Continue loop to check for fresh messages again
+        continue;
       }
     } catch (error) {
       // Log error but don't crash - allow retry on next iteration
