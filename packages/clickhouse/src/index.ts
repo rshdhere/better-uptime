@@ -127,6 +127,11 @@ export async function recordUptimeEvent(
   });
 }
 
+// CRITICAL: Hard batch size cap to prevent memory spikes and long event loop blocks
+// Large batches can cause memory pressure and block the event loop during serialization
+// Splitting into chunks ensures ClickHouse writes remain non-blocking
+const CLICKHOUSE_MAX_BATCH_SIZE = 1000;
+
 export async function recordUptimeEvents(
   events: UptimeEventRecord[],
 ): Promise<void> {
@@ -136,19 +141,44 @@ export async function recordUptimeEvents(
   const clickhouse = getClient();
   const ingestedAtIso = new Date().toISOString();
 
-  await clickhouse.insert({
-    table: CLICKHOUSE_METRICS_TABLE,
-    values: events.map((event) => ({
-      website_id: event.websiteId,
-      region_id: event.regionId,
-      status: event.status,
-      response_time_ms: event.responseTimeMs ?? null,
-      http_status_code: event.httpStatusCode ?? null,
-      checked_at: event.checkedAt.toISOString(),
-      ingested_at: ingestedAtIso,
-    })),
-    format: "JSONEachRow",
-  });
+  // PROTECT CLICKHOUSE FROM OVERLOAD:
+  // Split large batches into chunks to prevent memory spikes and event loop blocks
+  // This ensures writes remain non-blocking even with large event volumes
+  if (events.length <= CLICKHOUSE_MAX_BATCH_SIZE) {
+    // Small batch - write directly
+    await clickhouse.insert({
+      table: CLICKHOUSE_METRICS_TABLE,
+      values: events.map((event) => ({
+        website_id: event.websiteId,
+        region_id: event.regionId,
+        status: event.status,
+        response_time_ms: event.responseTimeMs ?? null,
+        http_status_code: event.httpStatusCode ?? null,
+        checked_at: event.checkedAt.toISOString(),
+        ingested_at: ingestedAtIso,
+      })),
+      format: "JSONEachRow",
+    });
+  } else {
+    // Large batch - split into chunks and write sequentially
+    // Sequential writes prevent overwhelming ClickHouse connection pool
+    for (let i = 0; i < events.length; i += CLICKHOUSE_MAX_BATCH_SIZE) {
+      const chunk = events.slice(i, i + CLICKHOUSE_MAX_BATCH_SIZE);
+      await clickhouse.insert({
+        table: CLICKHOUSE_METRICS_TABLE,
+        values: chunk.map((event) => ({
+          website_id: event.websiteId,
+          region_id: event.regionId,
+          status: event.status,
+          response_time_ms: event.responseTimeMs ?? null,
+          http_status_code: event.httpStatusCode ?? null,
+          checked_at: event.checkedAt.toISOString(),
+          ingested_at: ingestedAtIso,
+        })),
+        format: "JSONEachRow",
+      });
+    }
+  }
 }
 
 export function getClickhouseClient(): ClickHouseClient {
