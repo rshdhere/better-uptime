@@ -11,6 +11,10 @@
 
 <h2 align="center">Better Uptime</h2>
 
+<div align="center">
+  <img src="./apps/client/public/better-uptime.gif" alt="Better Uptime Demo" />
+</div>
+
 Immediate Credential's to test the project
 
 ```bash
