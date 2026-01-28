@@ -135,9 +135,13 @@ const CLICKHOUSE_MAX_BATCH_SIZE = 1000;
 export async function recordUptimeEvents(
   events: UptimeEventRecord[],
 ): Promise<void> {
-  if (events.length === 0) return;
-
+  // CRITICAL: Always call ensureSchema() even for empty arrays
+  // This proves ClickHouse is reachable and serves as the liveness signal
+  // Empty array = no rows to write, but ClickHouse connectivity is verified
   await ensureSchema();
+
+  // Early return AFTER ensureSchema() - liveness is confirmed, nothing to write
+  if (events.length === 0) return;
   const clickhouse = getClient();
   const ingestedAtIso = new Date().toISOString();
 

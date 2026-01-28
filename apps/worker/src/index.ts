@@ -238,6 +238,11 @@ async function startWorker() {
       );
     }
 
+    // Collect all message IDs for ACK (includes both valid and failed checks)
+    const allMessageIds: string[] = [];
+    // Collect successful events for ClickHouse write
+    const eventsToRecord: UptimeEventRecord[] = [];
+
     // Process valid messages
     if (validMessages.length > 0) {
       const results = await Promise.allSettled(
@@ -246,91 +251,84 @@ async function startWorker() {
         ),
       );
 
-      const successful: { streamId: string; event: UptimeEventRecord }[] = [];
-      const failedIds: string[] = [];
-
       for (let i = 0; i < results.length; i++) {
         const result = results[i];
         const message = validMessages[i];
         if (!message) continue;
 
+        // All valid messages must be ACKed regardless of check result
+        allMessageIds.push(message.id);
+
         if (result?.status === "fulfilled") {
-          successful.push({ streamId: message.id, event: result.value });
+          eventsToRecord.push(result.value);
         } else {
           console.error(
             `[Worker] ${logPrefix}: Failed to check website for message ${message.id}`,
             result?.reason,
           );
-          failedIds.push(message.id);
         }
       }
+    }
 
-      // ACK SAFETY INVARIANT (NON-NEGOTIABLE):
-      // Every message that enters the worker must be ACKed exactly once.
-      // ACK must happen even if:
-      // - HTTP fails
-      // - ClickHouse fails
-      // - Redis disconnects mid-batch
-      // PEL growth must be impossible by construction.
-      const allMessageIds = [
-        ...successful.map((s) => s.streamId),
-        ...failedIds,
-      ];
-
-      // CLICKHOUSE LIVENESS INVARIANT:
-      // Worker liveness is defined as "ClickHouse accepted a request"
-      // Liveness must NOT depend on:
-      // - number of rows
-      // - successful HTTP checks
-      // - fresh vs reclaimed messages
-      // Any successful ClickHouse request must update liveness
-      // CRITICAL: Call recordUptimeEvents unconditionally (even with empty array)
-      // This ensures liveness tracks ClickHouse availability, not data quality
-      // Zero rows is still a successful write - it proves ClickHouse is reachable
-      try {
-        // Persist immutable uptime events to ClickHouse (single source of truth)
-        await recordUptimeEvents(successful.map((s) => s.event));
-        // CRITICAL: Update liveness signal whenever ClickHouse successfully accepts a request
-        // This must happen for:
-        // - fresh batches
-        // - reclaimed (PEL) batches
-        // - partial batches (even if some HTTP checks failed)
-        // - empty batches (all HTTP checks failed, but ClickHouse is reachable)
-        // Liveness tracks system health (ClickHouse availability), not data quality
-        markWriteSuccess(); // ← liveness = ClickHouse accepted request
-        if (successful.length > 0) {
-          const action = isReclaimed ? "Replayed" : "Recorded";
-          console.log(
-            `[Worker] ${action} ${successful.length} uptime check(s) to ClickHouse`,
-          );
-        }
-      } catch (error) {
-        console.error(
-          `[Worker] ${logPrefix}: Failed to persist uptime batch`,
-          error,
+    // CLICKHOUSE LIVENESS INVARIANT (NON-NEGOTIABLE):
+    // Worker liveness is defined as "ClickHouse accepted a request"
+    // Liveness must NOT depend on:
+    // - number of rows
+    // - successful HTTP checks
+    // - HTTP status codes (403, 500, etc.)
+    // - fresh vs reclaimed messages
+    // - valid vs invalid websites
+    // CRITICAL: recordUptimeEvents() is called UNCONDITIONALLY for every batch
+    // Even an empty array proves ClickHouse is reachable (via ensureSchema())
+    try {
+      // Persist uptime events to ClickHouse (single source of truth)
+      // ALWAYS called, even with empty array - liveness = ClickHouse reachability
+      await recordUptimeEvents(eventsToRecord);
+      // CRITICAL: Update liveness signal whenever ClickHouse successfully accepts a request
+      // This must happen for:
+      // - fresh batches
+      // - reclaimed (PEL) batches
+      // - partial batches (some HTTP checks failed)
+      // - empty batches (all HTTP checks failed OR all websites invalid)
+      // Liveness tracks system health (ClickHouse availability), not data quality
+      markWriteSuccess(); // ← liveness = ClickHouse accepted request
+      if (eventsToRecord.length > 0) {
+        const action = isReclaimed ? "Replayed" : "Recorded";
+        console.log(
+          `[Worker] ${action} ${eventsToRecord.length} uptime check(s) to ClickHouse`,
         );
-        // Continue to ACK even if ClickHouse fails - prevents PEL growth
-        // Failed checks will be retried on next publisher cycle
-        // Liveness is NOT updated on ClickHouse failure (correct behavior)
-      } finally {
-        // ACK ALL messages unconditionally (independent of ClickHouse/HTTP success)
-        // This is the single ACK point - no early returns can bypass this
-        // finally block ensures ACK happens even if exceptions are thrown
-        if (allMessageIds.length > 0) {
-          try {
-            await xAckBulk({
-              consumerGroup: REGION_ID,
-              eventIds: allMessageIds,
-            });
-          } catch (ackError) {
-            // Log ACK failures but don't throw - message will be reclaimed by PEL reclaim
-            // Redis disconnects are handled gracefully - operation will retry
-            console.error(
-              `[Worker] ${logPrefix}: Failed to ACK messages (will be reclaimed by PEL reclaim):`,
-              ackError,
-            );
-          }
-        }
+      }
+    } catch (error) {
+      console.error(
+        `[Worker] ${logPrefix}: Failed to persist uptime batch`,
+        error,
+      );
+      // Continue to ACK even if ClickHouse fails - prevents PEL growth
+      // Failed checks will be retried on next publisher cycle
+      // Liveness is NOT updated on ClickHouse failure (correct behavior)
+    }
+
+    // ACK SAFETY INVARIANT (NON-NEGOTIABLE):
+    // Every message that enters the worker must be ACKed exactly once.
+    // ACK must happen even if:
+    // - HTTP fails
+    // - ClickHouse fails
+    // - Redis disconnects mid-batch
+    // PEL growth must be impossible by construction.
+    // ACK is in the main flow (not finally) because ClickHouse failure should NOT block ACK
+    if (allMessageIds.length > 0) {
+      try {
+        await xAckBulk({
+          consumerGroup: REGION_ID,
+          eventIds: allMessageIds,
+        });
+      } catch (ackError) {
+        // Log ACK failures but don't throw - message will be reclaimed by PEL reclaim
+        // Redis disconnects are handled gracefully - operation will retry
+        console.error(
+          `[Worker] ${logPrefix}: Failed to ACK messages (will be reclaimed by PEL reclaim):`,
+          ackError,
+        );
       }
     }
   }
