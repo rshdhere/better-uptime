@@ -274,18 +274,50 @@ export async function xReadGroup(
       return [];
     }
 
-    const messages: MessageType[] = response[0].messages
-      .filter(
-        (streamMessage: StreamMessage) =>
-          streamMessage.message.url && streamMessage.message.id,
-      )
-      .map((streamMessage: StreamMessage) => ({
+    // CRITICAL FIX: Identify malformed messages (missing url or id)
+    // These must be ACKed immediately to prevent infinite PEL loops
+    const malformedMessageIds: string[] = [];
+    const validMessages: StreamMessage[] = [];
+
+    for (const streamMessage of response[0].messages) {
+      if (streamMessage.message.url && streamMessage.message.id) {
+        validMessages.push(streamMessage);
+      } else {
+        malformedMessageIds.push(streamMessage.id);
+        console.warn(
+          `[xReadGroup] Malformed message ${streamMessage.id}: missing url or id, will ACK to clear from PEL`,
+        );
+      }
+    }
+
+    // ACK malformed messages immediately to prevent PEL growth
+    if (malformedMessageIds.length > 0) {
+      try {
+        await Promise.allSettled(
+          malformedMessageIds.map((msgId) =>
+            client!.xAck(STREAM_NAME, options.consumerGroup, msgId),
+          ),
+        );
+        console.log(
+          `[xReadGroup] ACKed ${malformedMessageIds.length} malformed message(s) from PEL`,
+        );
+      } catch (ackError) {
+        console.error(
+          `[xReadGroup] Failed to ACK malformed messages:`,
+          ackError,
+        );
+      }
+    }
+
+    const messages: MessageType[] = validMessages.map(
+      (streamMessage: StreamMessage) => ({
         id: streamMessage.id,
         event: {
           url: streamMessage.message.url as string,
           id: streamMessage.message.id as string,
         },
-      }));
+      }),
+    );
 
     return messages;
   } catch (error) {
@@ -398,19 +430,54 @@ export async function xAutoClaimStale(
       // Update cursor to nextStartId for next iteration
       xAutoClaimCursors.set(options.consumerGroup, nextId);
 
-      // Map claimed messages to our format
-      const messages: MessageType[] = claimedMessages
-        .filter(
-          (streamMessage: StreamMessage) =>
-            streamMessage.message.url && streamMessage.message.id,
-        )
-        .map((streamMessage: StreamMessage) => ({
+      // CRITICAL FIX: Identify malformed messages (missing url or id)
+      // These must be ACKed immediately to prevent infinite PEL loops
+      const malformedMessageIds: string[] = [];
+      const validClaimedMessages: StreamMessage[] = [];
+
+      for (const streamMessage of claimedMessages) {
+        if (streamMessage.message.url && streamMessage.message.id) {
+          validClaimedMessages.push(streamMessage);
+        } else {
+          // Message is malformed - mark for immediate ACK
+          malformedMessageIds.push(streamMessage.id);
+          console.warn(
+            `[xAutoClaimStale] Malformed message ${streamMessage.id}: missing url or id, will ACK to clear from PEL`,
+          );
+        }
+      }
+
+      // ACK malformed messages immediately to prevent PEL growth
+      // These messages can never be processed, so ACKing is the only safe action
+      if (malformedMessageIds.length > 0) {
+        try {
+          await Promise.allSettled(
+            malformedMessageIds.map((msgId) =>
+              client!.xAck(STREAM_NAME, options.consumerGroup, msgId),
+            ),
+          );
+          console.log(
+            `[xAutoClaimStale] ACKed ${malformedMessageIds.length} malformed message(s) from PEL`,
+          );
+        } catch (ackError) {
+          // Log but don't fail - message will be reclaimed again
+          console.error(
+            `[xAutoClaimStale] Failed to ACK malformed messages:`,
+            ackError,
+          );
+        }
+      }
+
+      // Map valid claimed messages to our format
+      const messages: MessageType[] = validClaimedMessages.map(
+        (streamMessage: StreamMessage) => ({
           id: streamMessage.id,
           event: {
             url: streamMessage.message.url as string,
             id: streamMessage.message.id as string,
           },
-        }));
+        }),
+      );
 
       allMessages.push(...messages);
 
