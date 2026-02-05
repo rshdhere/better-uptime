@@ -87,30 +87,45 @@ async function ensureSchema(): Promise<void> {
 
     const clickhouse = getClient();
 
-    await clickhouse.command({
-      query: `
-        CREATE TABLE IF NOT EXISTS ${CLICKHOUSE_METRICS_TABLE} (
-          website_id String,
-          region_id String,
-          status Enum('UP' = 1, 'DOWN' = 0),
-          response_time_ms Nullable(UInt32),
-          http_status_code Nullable(UInt16),
-          checked_at DateTime64(3, 'UTC'),
-          ingested_at DateTime64(3, 'UTC')
-        )
-        ENGINE = MergeTree
-        ORDER BY (website_id, region_id, checked_at)
-      `,
-    });
+    // CRITICAL: Wrap schema commands in timeout to prevent indefinite hangs
+    // If ClickHouse is unreachable, this will throw after 10s instead of hanging forever
+    await withTimeout(
+      clickhouse.command({
+        query: `
+          CREATE TABLE IF NOT EXISTS ${CLICKHOUSE_METRICS_TABLE} (
+            website_id String,
+            region_id String,
+            status Enum('UP' = 1, 'DOWN' = 0),
+            response_time_ms Nullable(UInt32),
+            http_status_code Nullable(UInt16),
+            checked_at DateTime64(3, 'UTC'),
+            ingested_at DateTime64(3, 'UTC')
+          )
+          ENGINE = MergeTree
+          ORDER BY (website_id, region_id, checked_at)
+        `,
+      }),
+      CLICKHOUSE_SCHEMA_TIMEOUT_MS,
+      "ClickHouse CREATE TABLE",
+    );
 
     // Add column if table already exists (for migration)
-    await clickhouse.command({
-      query: `
-        ALTER TABLE ${CLICKHOUSE_METRICS_TABLE}
-        ADD COLUMN IF NOT EXISTS http_status_code Nullable(UInt16)
-      `,
-    });
-  })();
+    await withTimeout(
+      clickhouse.command({
+        query: `
+          ALTER TABLE ${CLICKHOUSE_METRICS_TABLE}
+          ADD COLUMN IF NOT EXISTS http_status_code Nullable(UInt16)
+        `,
+      }),
+      CLICKHOUSE_SCHEMA_TIMEOUT_MS,
+      "ClickHouse ALTER TABLE",
+    );
+  })().catch((error) => {
+    // CRITICAL: Reset schemaReadyPromise on failure so subsequent calls can retry
+    // Without this, a single failure would permanently block all ClickHouse operations
+    schemaReadyPromise = null;
+    throw error;
+  });
 
   return schemaReadyPromise;
 }
@@ -156,32 +171,19 @@ export async function recordUptimeEvents(
   const clickhouse = getClient();
   const ingestedAt = toClickHouseDateTime64(new Date());
 
+  // Timeout for insert operations - slightly longer than query timeout
+  // Inserts may take longer with large batches
+  const INSERT_TIMEOUT_MS = 15_000;
+
   // PROTECT CLICKHOUSE FROM OVERLOAD:
   // Split large batches into chunks to prevent memory spikes and event loop blocks
   // This ensures writes remain non-blocking even with large event volumes
   if (events.length <= CLICKHOUSE_MAX_BATCH_SIZE) {
-    // Small batch - write directly
-    await clickhouse.insert({
-      table: CLICKHOUSE_METRICS_TABLE,
-      values: events.map((event) => ({
-        website_id: event.websiteId,
-        region_id: event.regionId,
-        status: event.status,
-        response_time_ms: event.responseTimeMs ?? null,
-        http_status_code: event.httpStatusCode ?? null,
-        checked_at: toClickHouseDateTime64(event.checkedAt),
-        ingested_at: ingestedAt,
-      })),
-      format: "JSONEachRow",
-    });
-  } else {
-    // Large batch - split into chunks and write sequentially
-    // Sequential writes prevent overwhelming ClickHouse connection pool
-    for (let i = 0; i < events.length; i += CLICKHOUSE_MAX_BATCH_SIZE) {
-      const chunk = events.slice(i, i + CLICKHOUSE_MAX_BATCH_SIZE);
-      await clickhouse.insert({
+    // Small batch - write directly with timeout
+    await withTimeout(
+      clickhouse.insert({
         table: CLICKHOUSE_METRICS_TABLE,
-        values: chunk.map((event) => ({
+        values: events.map((event) => ({
           website_id: event.websiteId,
           region_id: event.regionId,
           status: event.status,
@@ -191,7 +193,32 @@ export async function recordUptimeEvents(
           ingested_at: ingestedAt,
         })),
         format: "JSONEachRow",
-      });
+      }),
+      INSERT_TIMEOUT_MS,
+      "ClickHouse insert",
+    );
+  } else {
+    // Large batch - split into chunks and write sequentially
+    // Sequential writes prevent overwhelming ClickHouse connection pool
+    for (let i = 0; i < events.length; i += CLICKHOUSE_MAX_BATCH_SIZE) {
+      const chunk = events.slice(i, i + CLICKHOUSE_MAX_BATCH_SIZE);
+      await withTimeout(
+        clickhouse.insert({
+          table: CLICKHOUSE_METRICS_TABLE,
+          values: chunk.map((event) => ({
+            website_id: event.websiteId,
+            region_id: event.regionId,
+            status: event.status,
+            response_time_ms: event.responseTimeMs ?? null,
+            http_status_code: event.httpStatusCode ?? null,
+            checked_at: toClickHouseDateTime64(event.checkedAt),
+            ingested_at: ingestedAt,
+          })),
+          format: "JSONEachRow",
+        }),
+        INSERT_TIMEOUT_MS,
+        "ClickHouse insert chunk",
+      );
     }
   }
 }
