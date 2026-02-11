@@ -1,23 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Trash2, Home } from "lucide-react";
+import { Search, ChevronDown } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Label } from "@/components/Label";
-import { ProfileDropdown } from "@/components/ProfileDropdown";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+import { MonitorCard } from "@/components/dashboard/MonitorCard";
+import { CreateMonitorDropdown } from "@/components/dashboard/CreateMonitorDropdown";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,7 +20,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/AlertDialog";
 
 function getErrorMessage(error: { message: string }): string {
@@ -50,8 +42,12 @@ export default function DashboardPage() {
     if (typeof window === "undefined") return null;
     return localStorage.getItem("token");
   });
+
+  // Create Monitor Form State
+  const [isCreating, setIsCreating] = useState(false);
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
+  const [monitorToDelete, setMonitorToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -59,43 +55,24 @@ export default function DashboardPage() {
     }
   }, [router, token]);
 
-  const websitesQuery = trpc.website.list.useQuery(undefined, {
+  const websitesQuery = trpc.website.status.useQuery(undefined, {
     enabled: !!token,
     retry: false,
+    refetchInterval: 60_000,
   });
-
-  const userQuery = trpc.user.me.useQuery(undefined, {
-    enabled: !!token,
-    retry: false,
-  });
-
-  useEffect(() => {
-    // Never toast error for empty data - these are NOT errors:
-    // - No websites (cold start user)
-    // - Empty data is valid state
-    if (websitesQuery.error && websitesQuery.data === undefined) {
-      // Only show error if we don't have any data (not just empty array)
-      const errorMessage = getErrorMessage(websitesQuery.error);
-      // Don't show error for UNAUTHORIZED - it's handled by trpc client
-      if (!errorMessage.toLowerCase().includes("unauthorized")) {
-        toast.error("Failed to load websites", {
-          description: errorMessage,
-        });
-      }
-    }
-  }, [websitesQuery.error, websitesQuery.data]);
 
   const registerWebsite = trpc.website.register.useMutation({
     onSuccess: async () => {
-      toast.success("Website added", {
+      toast.success("Monitor created", {
         description: "We’ll start monitoring it shortly.",
       });
       setUrl("");
       setName("");
+      setIsCreating(false);
       await utils.website.list.invalidate();
     },
     onError: (err) => {
-      toast.error("Couldn’t add website", {
+      toast.error("Couldn’t add monitor", {
         description: getErrorMessage(err),
       });
     },
@@ -103,27 +80,19 @@ export default function DashboardPage() {
 
   const deleteWebsite = trpc.website.delete.useMutation({
     onSuccess: async () => {
-      toast.success("Website deleted", {
-        description: "The website has been removed from monitoring.",
-      });
-      // Invalidate both queries to ensure consistency across pages
+      toast.success("Monitor deleted");
+      setMonitorToDelete(null);
       await Promise.all([
         utils.website.list.invalidate(),
         utils.website.status.invalidate(),
       ]);
     },
     onError: (err) => {
-      toast.error("Couldn't delete website", {
+      toast.error("Couldn't delete monitor", {
         description: getErrorMessage(err),
       });
     },
   });
-
-  const isSubmitting = registerWebsite.isPending;
-  const isDeleting = deleteWebsite.isPending;
-  const websites = websitesQuery.data?.websites ?? [];
-
-  const dashboardTitle = "Dashboard";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,209 +102,168 @@ export default function DashboardPage() {
     });
   };
 
-  // While we decide if the user is authed, keep UI minimal to avoid a flash.
-  if (!token) {
-    return (
-      <div className="relative mx-auto w-full max-w-5xl px-4 pt-28 pb-16">
-        {/* Left diagonal stripe border */}
-        <div
-          className="diagonal-stripes pointer-events-none absolute -top-28 -bottom-16 -left-5 hidden w-5 lg:block"
-          aria-hidden="true"
-        />
-        {/* Right diagonal stripe border */}
-        <div
-          className="diagonal-stripes pointer-events-none absolute -top-28 -bottom-16 -right-5 hidden w-5 lg:block"
-          aria-hidden="true"
-        />
-        <div className="rounded-2xl border border-border bg-card p-6 text-card-foreground">
-          <div className="text-sm text-muted-foreground">
-            Redirecting to{" "}
-            <Link href="/login" className="underline underline-offset-4">
-              login
-            </Link>
-            …
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Build profile data for dropdown
-  const profileData = userQuery.data
-    ? {
-        name: userQuery.data.name || userQuery.data.email || "User",
-        email: userQuery.data.email || "",
-        avatar: userQuery.data.avatarUrl || undefined,
-      }
-    : null;
+  const websites = websitesQuery.data?.websites ?? [];
 
   return (
-    <div className="relative mx-auto w-full max-w-5xl px-4 pt-28 pb-16">
-      {/* Left diagonal stripe border */}
-      <div
-        className="diagonal-stripes pointer-events-none absolute -top-28 -bottom-16 -left-5 hidden w-5 lg:block"
-        aria-hidden="true"
-      />
-      {/* Right diagonal stripe border */}
-      <div
-        className="diagonal-stripes pointer-events-none absolute -top-28 -bottom-16 -right-5 hidden w-5 lg:block"
-        aria-hidden="true"
-      />
-      {/* Breadcrumb Navigation */}
-      <Breadcrumb className="mb-6">
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="/" className="flex items-center gap-1.5">
-                <Home className="size-4" />
-                <span>Home</span>
-              </Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>Dashboard</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
-
-      {/* Header with Profile Dropdown */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            {dashboardTitle}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Add the sites you want to monitor.
-          </p>
+    <div className="space-y-8 py-8">
+      {/* Page Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-6">
+        <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">
+          Monitors
+        </h1>
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-64">
+            <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+            <Input
+              placeholder="Search"
+              className="pl-9 bg-stone-100/50 border-stone-200 dark:bg-stone-900/50 dark:border-stone-800"
+            />
+          </div>
+          <CreateMonitorDropdown
+            onCreateClick={() => setIsCreating(!isCreating)}
+          />
         </div>
-        {profileData && <ProfileDropdown data={profileData} />}
       </div>
 
-      <div className="mt-8 rounded-2xl border border-border bg-card p-6 text-card-foreground">
-        <h2 className="text-lg font-semibold">Add a website</h2>
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="website-name">Name (optional)</Label>
-              <Input
-                id="website-name"
-                placeholder="My landing page"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={255}
-                autoComplete="off"
-              />
+      {/* Creation Form (Inline) */}
+      {isCreating && (
+        <div className="mx-6 rounded-xl border border-border bg-card p-6 shadow-sm animate-in fade-in slide-in-from-top-4">
+          <h2 className="mb-4 text-lg font-semibold">Create new monitor</h2>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="website-url">URL</Label>
+                <Input
+                  id="website-url"
+                  placeholder="https://example.com"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="website-name">Name (optional)</Label>
+                <Input
+                  id="website-name"
+                  placeholder="My landing page"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="website-url">URL</Label>
-              <Input
-                id="website-url"
-                placeholder="https://example.com"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                required
-                inputMode="url"
-                autoComplete="off"
-              />
-              <p className="text-xs text-muted-foreground">
-                Must start with http:// or https://
-              </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setIsCreating(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" isLoading={registerWebsite.isPending}>
+                Create Monitor
+              </Button>
             </div>
-          </div>
+          </form>
+        </div>
+      )}
 
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => router.push("/status")}
-            >
-              Check status
-            </Button>
-            <Button
-              type="submit"
-              isLoading={isSubmitting}
-              loadingText="Adding…"
-            >
-              Add website
-            </Button>
+      {/* Monitors List */}
+      <div className="space-y-4 px-6 relative">
+        <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground tracking-wider uppercase pl-2">
+          <div className="flex items-center gap-2">
+            <ChevronDown className="size-3" />
+            Monitors
           </div>
-        </form>
-      </div>
-
-      <div className="mt-8 rounded-2xl border border-border bg-card text-card-foreground">
-        <div className="border-b border-border px-6 py-4">
-          <h2 className="text-lg font-semibold">Your websites</h2>
+          {/* Optional: Add badge count here */}
         </div>
 
-        <div className="px-6 py-4">
+        <div className="space-y-2">
           {websitesQuery.isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : websites.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No websites yet. Add your first one above.
-            </p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {websites.map((w) => (
-                <li key={w.id} className="flex items-center gap-4 py-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">
-                      {w.name || w.url}
-                    </div>
-                    <a
-                      href={w.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="truncate text-sm text-muted-foreground underline underline-offset-4"
-                    >
-                      {w.url}
-                    </a>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-sm text-muted-foreground">
-                      {w.isActive ? "Active" : "Paused"}
-                    </div>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <button
-                          type="button"
-                          disabled={isDeleting}
-                          className="cursor-pointer rounded-lg p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-                          aria-label={`Delete ${w.name || w.url}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete website?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Are you sure you want to delete{" "}
-                            <span className="font-medium text-foreground">
-                              {w.name || w.url}
-                            </span>
-                            ? This action cannot be undone and all monitoring
-                            data will be removed.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => deleteWebsite.mutate({ id: w.id })}
-                          >
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </li>
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-16 w-full animate-pulse rounded-xl bg-stone-100 dark:bg-stone-900"
+                />
               ))}
-            </ul>
+            </div>
+          ) : websites.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground">
+              No monitors yet. Create one to start monitoring.
+            </div>
+          ) : (
+            websites.map((website) => (
+              <MonitorCard
+                key={website.websiteId}
+                website={website}
+                onDelete={(id) => setMonitorToDelete(id)}
+              />
+            ))
           )}
         </div>
       </div>
+
+      {/* Onboarding Section */}
+      <div className="px-6">
+        <h3 className="mb-4 text-lg font-semibold text-[var(--foreground)]">
+          Get the most out of Better Stack
+        </h3>
+        <div className="rounded-xl border border-[var(--coral-accent)]/20 bg-[var(--coral-accent)]/5 p-6 dark:bg-[var(--coral-accent)]/10">
+          <div className="flex items-start justify-between">
+            <div className="flex gap-4">
+              <div className="mt-1 flex size-8 items-center justify-center rounded-full border-2 border-[var(--coral-accent)] text-[var(--coral-accent)]">
+                <div className="size-2 rounded-full bg-[var(--coral-accent)]" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-[var(--foreground)]">
+                  Connect Slack or Microsoft Teams
+                </h4>
+                <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+                  Get alerted about new incidents, and acknowledge and resolve
+                  incidents directly from Slack.
+                </p>
+                <Button
+                  variant="secondary"
+                  className="mt-4 bg-white dark:bg-black border-border shadow-sm hover:bg-stone-50"
+                >
+                  Integrations
+                </Button>
+              </div>
+            </div>
+            <span className="text-xs font-medium text-muted-foreground">
+              5 out of 6 steps left
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog
+        open={!!monitorToDelete}
+        onOpenChange={() => setMonitorToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete monitor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone and all monitoring data will be
+              removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                monitorToDelete && deleteWebsite.mutate({ id: monitorToDelete })
+              }
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

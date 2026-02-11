@@ -135,6 +135,25 @@
   );
 }
 
+
 .dark .diagonal-stripes {
   --stripe-color: oklch(0.45 0 0 / 40%);
+}
+
+/* Better Stack Theme Variables */
+:root {
+  --cream-bg: #F5F3ED;
+  --sidebar-bg: #FBF9F3;
+  --coral-accent: #E55B3C;
+}
+
+.dark {
+  --cream-bg: oklch(0.145 0 0);
+  --sidebar-bg: oklch(0.12 0 0);
+  --coral-accent: #E55B3C;
+}
+
+/* Helper utility for cream background */
+.bg-cream {
+  background-color: var(--cream-bg);
 }

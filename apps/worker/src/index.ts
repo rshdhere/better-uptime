@@ -13,6 +13,41 @@ import {
 } from "@repo/streams";
 import { prismaClient } from "@repo/store";
 import axios from "axios";
+import process from "node:process";
+
+// Timeout for Prisma queries - prevents hanging on slow/dead database connections
+const PRISMA_QUERY_TIMEOUT_MS = 10_000;
+const WEBSITE_CHECK_TIMEOUT_MS = 10_000;
+// Hard deadline guard in case Axios timeout is not honored by runtime/network stack.
+const WEBSITE_CHECK_HARD_TIMEOUT_MS = 12_000;
+const MAIN_LOOP_ERROR_RETRY_DELAY_MS = 2_000;
+
+/**
+ * Race a promise against a client-side timeout.
+ * Prevents indefinite hangs on external service calls (Prisma, etc.).
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      },
+    );
+  });
+}
 
 // Validate required environment variables
 if (!REGION_ID || !WORKER_ID) {
@@ -35,17 +70,25 @@ async function checkWebsite(
   let responseTimeMs: number | undefined;
   let httpStatus: number | undefined;
   const checkedAt = new Date();
+  const abortController = new AbortController();
+  const abortTimeout = setTimeout(() => {
+    abortController.abort();
+  }, WEBSITE_CHECK_TIMEOUT_MS);
 
   try {
-    const res = await axios.get(url, {
-      timeout: 10_000,
-      maxRedirects: 5,
-      validateStatus: () => true,
-      headers: {
-        "User-Agent":
-          "Uptique/1.0 (Uptime Monitor; https://uptique.raashed.xyz)",
-      },
-    });
+    const res = await withTimeout(
+      axios.get(url, {
+        signal: abortController.signal,
+        maxRedirects: 5,
+        validateStatus: () => true,
+        headers: {
+          "User-Agent":
+            "Uptique/1.0 (Uptime Monitor; https://uptique.raashed.xyz)",
+        },
+      }),
+      WEBSITE_CHECK_HARD_TIMEOUT_MS,
+      `Website check ${websiteId}`,
+    );
 
     responseTimeMs = Date.now() - startTime;
     httpStatus = res.status;
@@ -63,6 +106,8 @@ async function checkWebsite(
         error instanceof Error ? error.message : "Unknown error"
       }`,
     );
+  } finally {
+    clearTimeout(abortTimeout);
   }
 
   return {
@@ -125,9 +170,21 @@ async function startWorker() {
   let previousPelCount: number = 0;
   let pelNonDecreasingSince: number | null = null;
   let pelCriticalLoggedAt: number | null = null;
+  // OVERLAP GUARD: Prevents concurrent PEL monitor executions.
+  // setInterval does NOT await async callbacks — if a previous invocation is still
+  // running when the next interval fires, they run concurrently, accumulating
+  // Redis connections and memory. This flag serializes execution.
+  let pelMonitorRunning = false;
 
   setInterval(
     async () => {
+      if (pelMonitorRunning) {
+        console.warn(
+          "[Worker] PEL monitor skipped: previous invocation still running",
+        );
+        return;
+      }
+      pelMonitorRunning = true;
       try {
         const pelInfo = await xPendingInfo(REGION_ID);
         const currentPelCount = pelInfo.pending;
@@ -196,14 +253,24 @@ async function startWorker() {
       } catch (error) {
         // Log error but don't crash - monitoring failures shouldn't stop processing
         console.error("[Worker] Failed to check PEL status:", error);
+      } finally {
+        pelMonitorRunning = false;
       }
     },
     5 * 60 * 1000,
   ); // Every 5 mins
 
   // WORKER SELF-LIVENESS WATCHDOG:
-  // Monitor last successful ClickHouse write to detect worker stalls
-  // LOG ONLY - never exit process (no self-DDoS via restarts)
+  // Monitor main loop health and force recovery when stuck.
+  //
+  // RATIONALE FOR process.exit():
+  // A stuck `await` (zombie Redis connection, hung Prisma query) CANNOT be unwound
+  // from within the same process. The only recovery is to restart the process.
+  // PM2 with exp_backoff_restart_delay prevents restart storms.
+  //
+  // With client-side timeouts on all Redis/DB operations, the main loop should
+  // never freeze for more than ~30s. A 5-minute threshold means something is
+  // genuinely unrecoverable.
   setInterval(
     () => {
       const now = Date.now();
@@ -212,24 +279,23 @@ async function startWorker() {
       const timeSinceLastLoop = now - lastLoopIterationAt;
       const timeSinceLastLoopMinutes = Math.floor(timeSinceLastLoop / 60_000);
 
-      // CRITICAL: Check if main loop is frozen (should iterate every few seconds)
-      // If loop hasn't run in 5 minutes, the worker is completely stuck
+      // CRITICAL: If main loop is frozen for >5 minutes, force restart.
+      // A stuck `await` cannot self-heal — only process restart can recover.
+      // PM2 exp_backoff_restart_delay prevents restart storms.
       if (timeSinceLastLoop > 300_000) {
         // 5 minutes
         console.error(
-          `[Worker] CRITICAL: Main loop not responding for ${timeSinceLastLoopMinutes} minutes. Worker is frozen.`,
+          `[Worker] CRITICAL: Main loop not responding for ${timeSinceLastLoopMinutes} minutes. Forcing process exit for PM2 restart.`,
         );
+        process.exit(1);
       }
 
-      // CRITICAL: Log if no writes for >30 minutes, but NEVER exit process
-      // Increased from 15 to 30 minutes to reduce false positives
-      // PM2 restarts must NOT be relied upon for correctness
+      // WARN if no ClickHouse writes for >30 minutes (informational, no exit)
       if (timeSinceLastWrite > 1_800_000) {
         // 30 minutes
         console.error(
           `[Worker] LIVENESS WARNING: No ClickHouse writes for ${timeSinceLastWriteMinutes} minutes. Worker may be stalled.`,
         );
-        // DO NOT call process.exit() - allow worker to self-heal
       }
     },
     2 * 60 * 1000,
@@ -266,9 +332,13 @@ async function startWorker() {
 
     for (const message of messages) {
       try {
-        const website = await prismaClient.website.findUnique({
-          where: { id: message.event.id },
-        });
+        const website = await withTimeout(
+          prismaClient.website.findUnique({
+            where: { id: message.event.id },
+          }),
+          PRISMA_QUERY_TIMEOUT_MS,
+          `Prisma findUnique(${message.event.id})`,
+        );
 
         if (!website || !website.isActive) {
           invalidMessageIds.push(message.id);
@@ -312,13 +382,9 @@ async function startWorker() {
         ),
       );
 
-      for (let i = 0; i < results.length; i++) {
-        const result = results[i];
-        const message = validMessages[i];
-        if (!message) continue;
-
-        // All valid messages must be ACKed regardless of check result
+      for (const [index, message] of validMessages.entries()) {
         allMessageIds.push(message.id);
+        const result = results[index];
 
         if (result?.status === "fulfilled") {
           eventsToRecord.push(result.value);
@@ -431,7 +497,13 @@ async function startWorker() {
       // Log error but don't crash - allow retry on next iteration
       // Connection errors will be handled by Redis reconnect strategy
       console.error("[Worker] Error in main processing loop:", error);
-      // No delay on error - retry immediately to recover quickly
+      // RECOVERY SLEEP: Prevent tight busy-looping when errors happen rapidly.
+      // Without this, a persistent error (Redis down, etc.) causes thousands of
+      // iterations per second, flooding logs and burning CPU.
+      // 2s is long enough to prevent busy-loop, short enough to recover quickly.
+      await new Promise((resolve) =>
+        setTimeout(resolve, MAIN_LOOP_ERROR_RETRY_DELAY_MS),
+      );
     }
 
     // CRITICAL: No artificial delays - rely only on Redis BLOCK for backpressure

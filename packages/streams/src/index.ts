@@ -69,6 +69,43 @@ const isTestEnv = process.env.NODE_ENV === "test";
 
 let client: ReturnType<typeof createClient> | null = null;
 
+/**
+ * Race a promise against a client-side timeout.
+ * CRITICAL: Prevents indefinite hangs when Redis connection is in a zombie state
+ * (TCP connection appears open but is actually dead - BLOCK commands never return).
+ *
+ * Unlike Promise.race, this properly handles the losing promise's rejection
+ * to prevent unhandled rejection crashes.
+ */
+function withRedisTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`[Redis] ${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      },
+    );
+  });
+}
+
+// Client-side timeout constants
+// These protect against zombie TCP connections where server-side BLOCK never returns
+const XREADGROUP_TIMEOUT_MS = 5_000; // BLOCK is 1000ms, 5s gives generous margin
+const XAUTOCLAIM_TIMEOUT_MS = 10_000; // Non-blocking but may scan large PELs
+const REDIS_COMMAND_TIMEOUT_MS = 10_000; // General Redis command timeout
+
 if (!isTestEnv) {
   const redisClient = createClient({
     username: REDIS_USERNAME,
@@ -76,24 +113,40 @@ if (!isTestEnv) {
     socket: {
       host: REDIS_HOST,
       port: Number(REDIS_PORT),
+      // CRITICAL: TCP keepAlive detects zombie connections at the OS level.
+      // Without this, a dead connection can hang BLOCK commands indefinitely.
+      // Dead connections are detected within ~1-2 min depending on OS settings.
+      keepAlive: true,
+      keepAliveInitialDelay: 15_000,
+      // Timeout for initial TCP connection establishment
+      connectTimeout: 10_000,
+      // Disable Nagle's algorithm for lower latency on small Redis commands
+      noDelay: true,
+      // CRITICAL: Never give up reconnecting. The previous limit of 10 retries
+      // caused permanent worker death after brief Redis outages.
+      // Exponential backoff: 200ms, 400ms, 800ms, ... capped at 30s
       reconnectStrategy: (retries) => {
-        if (retries > 10) {
-          console.error("Redis: Max reconnection attempts reached");
-          return new Error("Redis connection failed after 10 retries");
+        const delay = Math.min(retries * 200, 30_000);
+        if (retries % 10 === 0) {
+          // Log every 10th attempt to avoid spam but maintain visibility
+          console.warn(
+            `Redis: Reconnecting in ${delay}ms (attempt ${retries})`,
+          );
         }
-        const delay = Math.min(retries * 100, 3000);
-        console.log(`Redis: Reconnecting in ${delay}ms (attempt ${retries})`);
         return delay;
       },
     },
+    // Ping Redis periodically to detect zombie connections from the application layer.
+    // If a PING doesn't get a response, node-redis marks the connection as dead
+    // and triggers reconnection. This is the most reliable zombie detection mechanism.
+    pingInterval: 30_000,
   });
 
   redisClient.on("error", (err) => {
     // GUARDRAIL: Redis errors must never crash the worker
     // Log error but allow automatic reconnection to handle it
     console.error("Redis Client Error:", err.message);
-    // Don't exit - allow automatic reconnection
-    // All Redis operations handle disconnects gracefully
+    // Don't exit - reconnect strategy NEVER gives up
   });
 
   redisClient.on("connect", () => {
@@ -104,14 +157,26 @@ if (!isTestEnv) {
     console.log("Redis: Reconnecting...");
   });
 
+  redisClient.on("ready", () => {
+    console.log("Redis: Connection ready");
+  });
+
+  // CRITICAL: Set client to redisClient BEFORE connecting.
+  // This ensures the reconnect strategy can restore the connection even if
+  // the initial connect() fails. Previously, client was set to null on failure,
+  // making the worker permanently broken after a transient Redis outage at startup.
+  client = redisClient;
+
   try {
-    client = await redisClient.connect();
+    await redisClient.connect();
     console.log("Redis: Initial connection established");
   } catch (error) {
-    console.error("Failed to connect to Redis:", error);
-    // Don't exit - the client will retry automatically
-    // Set client to null so functions can handle it gracefully
-    client = null;
+    console.error("Failed to initial connect to Redis:", error);
+    // DON'T set client = null — reconnect strategy will keep retrying.
+    // The client instance is still valid and will auto-reconnect.
+    console.log(
+      "Redis: Will keep retrying via reconnect strategy in background",
+    );
   }
 }
 
@@ -137,13 +202,17 @@ export async function ensureConsumerGroup(
   try {
     // XGROUP CREATE with MKSTREAM creates both stream and group if missing
     // This is idempotent - if group exists, it returns BUSYGROUP which we ignore
-    await client.xGroupCreate(
-      STREAM_NAME,
-      consumerGroup,
-      "0", // Start from beginning
-      {
-        MKSTREAM: true, // Create stream if it doesn't exist
-      },
+    await withRedisTimeout(
+      client.xGroupCreate(
+        STREAM_NAME,
+        consumerGroup,
+        "0", // Start from beginning
+        {
+          MKSTREAM: true, // Create stream if it doesn't exist
+        },
+      ),
+      REDIS_COMMAND_TIMEOUT_MS,
+      "xGroupCreate",
     );
   } catch (error: unknown) {
     // BUSYGROUP means group already exists - this is fine, ignore it (idempotent)
@@ -200,7 +269,11 @@ export async function xAddBulk(websites: WebsiteEvent[]) {
       // Do this after each batch to prevent unbounded growth
       try {
         // Use sendCommand for XTRIM - redis v5 API may vary, sendCommand is reliable
-        await client.sendCommand(["XTRIM", STREAM_NAME, "MAXLEN", "~", "8000"]);
+        await withRedisTimeout(
+          client.sendCommand(["XTRIM", STREAM_NAME, "MAXLEN", "~", "8000"]),
+          REDIS_COMMAND_TIMEOUT_MS,
+          "xTrim",
+        );
       } catch (error) {
         // Log but don't fail - trimming is best-effort
         // Stream will be trimmed on next batch or by periodic maintenance
@@ -252,19 +325,27 @@ export async function xReadGroup(
     // This prevents crashes when stream/group doesn't exist yet (e.g., first run)
     await ensureConsumerGroup(options.consumerGroup);
 
-    const response = (await client.xReadGroup(
-      options.consumerGroup,
-      options.workerId,
-      {
-        key: STREAM_NAME,
-        id: ">",
-      },
-      {
-        COUNT: 5,
-        // Prefer server-side blocking over client-side polling loops.
-        // This reduces CPU and log spam when the stream is idle.
-        BLOCK: 1000,
-      },
+    // CRITICAL: Client-side timeout wraps the BLOCK call.
+    // BLOCK: 1000 means Redis waits up to 1s server-side.
+    // If the TCP connection is zombie, the BLOCK never returns.
+    // 5s client-side timeout guarantees the main loop never freezes.
+    const response = (await withRedisTimeout(
+      client.xReadGroup(
+        options.consumerGroup,
+        options.workerId,
+        {
+          key: STREAM_NAME,
+          id: ">",
+        },
+        {
+          COUNT: 5,
+          // Prefer server-side blocking over client-side polling loops.
+          // This reduces CPU and log spam when the stream is idle.
+          BLOCK: 1000,
+        },
+      ),
+      XREADGROUP_TIMEOUT_MS,
+      "xReadGroup(BLOCK 1000)",
     )) as StreamReadResponse[];
 
     // Reset failure state on successful operation
@@ -406,15 +487,20 @@ export async function xAutoClaimStale(
     // NON-BLOCKING: Limits total reclaim per cycle to prevent starving XREADGROUP
     while (allMessages.length < maxTotalReclaim) {
       // node-redis XAUTOCLAIM returns: [messages, nextStartId]
-      const result = (await client.xAutoClaim(
-        STREAM_NAME,
-        options.consumerGroup,
-        options.workerId,
-        options.minIdleMs,
-        startId,
-        {
-          COUNT: options.count,
-        },
+      // CRITICAL: Client-side timeout prevents zombie connection hangs
+      const result = (await withRedisTimeout(
+        client.xAutoClaim(
+          STREAM_NAME,
+          options.consumerGroup,
+          options.workerId,
+          options.minIdleMs,
+          startId,
+          {
+            COUNT: options.count,
+          },
+        ),
+        XAUTOCLAIM_TIMEOUT_MS,
+        "xAutoClaimStale",
       )) as unknown as { messages: StreamMessage[]; nextId: string };
 
       const claimedMessages = result?.messages ?? null;
@@ -532,10 +618,10 @@ async function xAck(options: AckOptions): Promise<number> {
   }
 
   try {
-    const result = await client.xAck(
-      STREAM_NAME,
-      options.consumerGroup,
-      options.streamId,
+    const result = await withRedisTimeout(
+      client.xAck(STREAM_NAME, options.consumerGroup, options.streamId),
+      REDIS_COMMAND_TIMEOUT_MS,
+      "xAck",
     );
     return result;
   } catch (error) {
@@ -597,9 +683,10 @@ export async function xPendingInfo(
 
   try {
     // Get summary (pending count, first/last IDs, consumers)
-    const summary = (await client.xPending(
-      STREAM_NAME,
-      consumerGroup,
+    const summary = (await withRedisTimeout(
+      client.xPending(STREAM_NAME, consumerGroup),
+      REDIS_COMMAND_TIMEOUT_MS,
+      "xPending(summary)",
     )) as unknown as {
       pending: number;
       firstId: string | null;
@@ -619,14 +706,18 @@ export async function xPendingInfo(
     // XPENDING key group start end count
     let oldestIdleMs: number | null = null;
     try {
-      const pendingEntries = (await client.sendCommand([
-        "XPENDING",
-        STREAM_NAME,
-        consumerGroup,
-        "-",
-        "+",
-        "100",
-      ])) as Array<[string, string, number, number]> | null;
+      const pendingEntries = (await withRedisTimeout(
+        client.sendCommand([
+          "XPENDING",
+          STREAM_NAME,
+          consumerGroup,
+          "-",
+          "+",
+          "100",
+        ]),
+        REDIS_COMMAND_TIMEOUT_MS,
+        "xPending(detailed)",
+      )) as Array<[string, string, number, number]> | null;
 
       if (pendingEntries && pendingEntries.length > 0) {
         // XPENDING detailed format: [id, consumer, idleMs, deliveryCount]
@@ -719,14 +810,18 @@ export async function xForceAckStalePel(
 
     // Query XPENDING for detailed entries to find very old ones
     // XPENDING key group start end count
-    const pendingEntries = (await client.sendCommand([
-      "XPENDING",
-      STREAM_NAME,
-      options.consumerGroup,
-      "-",
-      "+",
-      String(maxCount),
-    ])) as Array<[string, string, number, number]> | null;
+    const pendingEntries = (await withRedisTimeout(
+      client.sendCommand([
+        "XPENDING",
+        STREAM_NAME,
+        options.consumerGroup,
+        "-",
+        "+",
+        String(maxCount),
+      ]),
+      REDIS_COMMAND_TIMEOUT_MS,
+      "xForceAckStalePel(xPending)",
+    )) as Array<[string, string, number, number]> | null;
 
     if (!pendingEntries || pendingEntries.length === 0) {
       return 0;

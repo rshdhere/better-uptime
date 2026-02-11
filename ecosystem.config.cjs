@@ -37,6 +37,11 @@ module.exports = {
      * =========================
      * Worker (Bun)
      * =========================
+     * RESTART PROTECTION:
+     * The worker watchdog calls process.exit(1) when the main loop is frozen
+     * (stuck Redis/DB await). PM2 restarts it automatically.
+     * exp_backoff_restart_delay prevents restart storms: 100ms, 200ms, 400ms...
+     * max_restarts caps total restarts in the min_uptime window.
      */
     {
       name: "uptique-worker-production",
@@ -44,6 +49,9 @@ module.exports = {
       script: "/root/.bun/bin/bun",
       args: "run start",
       interpreter: "none",
+      max_restarts: 20,
+      min_uptime: "30s",
+      exp_backoff_restart_delay: 100,
       env: {
         NODE_ENV: "production",
       },
