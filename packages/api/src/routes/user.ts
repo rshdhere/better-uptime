@@ -1,6 +1,5 @@
 import { TRPCError } from "@trpc/server";
 import jwt from "jsonwebtoken";
-import { z } from "zod";
 import {
   router,
   publicProcedure,
@@ -12,6 +11,10 @@ import {
   userInputValidation,
   githubAuthInput,
   signupOutputValidation,
+  verifyEmailInput,
+  resendVerificationInput,
+  resendVerificationOutput,
+  meOutput,
 } from "@repo/validators";
 import { prismaClient } from "@repo/store";
 import { GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET } from "@repo/config";
@@ -115,7 +118,7 @@ export const userRouter = router({
     }),
 
   verifyEmail: publicProcedure
-    .input(z.object({ token: z.string().min(1, "Token is required") }))
+    .input(verifyEmailInput)
     .output(userOutputValidation)
     .mutation(async ({ input }) => {
       const { token } = input;
@@ -178,8 +181,8 @@ export const userRouter = router({
     }),
 
   resendVerification: publicProcedure
-    .input(z.object({ email: z.string().email() }))
-    .output(z.object({ message: z.string() }))
+    .input(resendVerificationInput)
+    .output(resendVerificationOutput)
     .mutation(async ({ input }) => {
       const { email } = input;
 
@@ -438,33 +441,24 @@ export const userRouter = router({
       return { token };
     }),
 
-  me: protectedProcedure
-    .output(
-      z.object({
-        id: z.string(),
-        email: z.string().nullable(),
-        name: z.string().nullable(),
-        avatarUrl: z.string().nullable(),
-      }),
-    )
-    .query(async ({ ctx }) => {
-      const user = await prismaClient.user.findUnique({
-        where: { id: ctx.user.userId },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          avatarUrl: true,
-        },
+  me: protectedProcedure.output(meOutput).query(async ({ ctx }) => {
+    const user = await prismaClient.user.findUnique({
+      where: { id: ctx.user.userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatarUrl: true,
+      },
+    });
+
+    if (!user) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "User not found",
       });
+    }
 
-      if (!user) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "User not found",
-        });
-      }
-
-      return user;
-    }),
+    return user;
+  }),
 });

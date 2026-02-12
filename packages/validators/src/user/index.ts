@@ -37,6 +37,25 @@ export const signupOutputValidation = z.object({
   email: z.email(),
 });
 
+export const verifyEmailInput = z.object({
+  token: z.string().min(1, "Token is required"),
+});
+
+export const resendVerificationInput = z.object({
+  email: z.string().email(),
+});
+
+export const resendVerificationOutput = z.object({
+  message: z.string(),
+});
+
+export const meOutput = z.object({
+  id: z.string(),
+  email: z.string().nullable(),
+  name: z.string().nullable(),
+  avatarUrl: z.string().nullable(),
+});
+
 export const websiteResponse = z.object({
   message: z.string(),
   //TODO: needs to be updated when clickhouse is integrated, right now it says website was stored in the database
