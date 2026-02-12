@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { type inferRouterOutputs } from "@trpc/server";
+import { cx } from "@/lib/utils";
 import { type AppRouter } from "server";
 import {
   MoreHorizontal,
@@ -9,6 +10,8 @@ import {
   Pause,
   Trash2,
   Settings,
+  Check,
+  XCircle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -45,49 +48,61 @@ export function MonitorCard({ website, onDelete }: MonitorCardProps) {
 
   return (
     <div className="group relative flex items-center justify-between rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:border-primary-action/20 hover:shadow-md">
-      <div className="flex items-center gap-4">
-        {/* Status Indicator */}
-        <div className="relative flex size-3 items-center justify-center">
-          {isUp && (
-            <div
-              className={`absolute inline-flex h-full w-full animate-ping rounded-full ${statusColor} opacity-75`}
+      <div className="flex items-center gap-4 min-w-0">
+        {/* Status: visible tick (check) for Up, X for Down */}
+        <div
+          className={cx(
+            "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+            isUp
+              ? "bg-status-up/15 text-status-up"
+              : "bg-status-down/15 text-status-down",
+          )}
+          aria-label={isUp ? "Status: Up" : "Status: Down"}
+        >
+          {isUp ? (
+            <Check
+              className="size-3.5 shrink-0"
+              strokeWidth={2.5}
+              aria-hidden
+            />
+          ) : (
+            <XCircle
+              className="size-3.5 shrink-0"
+              strokeWidth={2}
+              aria-hidden
             />
           )}
-          <div
-            className={`relative inline-flex size-2.5 rounded-full ${statusColor}`}
-          />
+          <span>{isUp ? "Up" : "Down"}</span>
         </div>
 
         {/* Content */}
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
           <Link
             href={website.websiteUrl}
             target="_blank"
-            className="font-medium text-foreground hover:underline hover:decoration-primary-action hover:underline-offset-4"
+            rel="noopener noreferrer"
+            className="font-medium text-foreground hover:underline hover:decoration-primary-action hover:underline-offset-4 truncate"
           >
             {website.websiteName ||
               website.websiteUrl.replace(/^https?:\/\//, "")}
           </Link>
           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <span className={isUp ? "text-status-up" : "text-status-down"}>
-              {isUp ? "Up" : "Down"}
-            </span>
-            <span>•</span>
-            <span>{formattedDate}</span>
+            <span>Last checked {formattedDate}</span>
+            <span aria-hidden>·</span>
+            <span>3m check</span>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        {/* Placeholder for Sparkline or plain text */}
-        <div className="hidden text-xs font-medium text-muted-foreground sm:block">
-          3m check
-        </div>
-
+      <div className="flex items-center gap-3 shrink-0">
         {/* Actions Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground outline-none">
+            <button
+              type="button"
+              className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label="Actions"
+            >
               <MoreHorizontal className="size-4" />
               <span className="sr-only">Actions</span>
             </button>
