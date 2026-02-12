@@ -581,12 +581,7 @@ export function StatusOverview({ embedded = false }: StatusOverviewProps) {
   }, [statusQuery.data, viewMode]);
 
   return (
-    <div
-      className={cx(
-        "relative",
-        embedded ? "w-full" : "mx-auto w-full max-w-5xl px-4 pt-28 pb-16",
-      )}
-    >
+    <div className="relative">
       {/* Left diagonal stripe border */}
       <div
         className="diagonal-stripes pointer-events-none absolute -top-28 -bottom-16 -left-5 hidden w-5 lg:block"
@@ -597,203 +592,219 @@ export function StatusOverview({ embedded = false }: StatusOverviewProps) {
         className="diagonal-stripes pointer-events-none absolute -top-28 -bottom-16 -right-5 hidden w-5 lg:block"
         aria-hidden="true"
       />
-      {!token ? (
-        <div className="rounded-2xl border border-border bg-card p-6 text-card-foreground">
-          <div className="text-sm text-muted-foreground">
-            Redirecting to{" "}
-            <Link href="/login" className="underline underline-offset-4">
-              login
-            </Link>
-            …
-          </div>
-        </div>
-      ) : null}
 
-      {!embedded && (
-        <>
-          {/* Breadcrumb Navigation */}
-          <Breadcrumb className="mb-6">
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link href="/" className="flex items-center gap-1.5">
-                    <Home className="size-4" />
-                    <span>Home</span>
-                  </Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link href="/dashboard">Dashboard</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Status</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-                Website Status
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Monitor the uptime status of your websites.
-              </p>
+      <div
+        className={cx(
+          "mx-auto w-full max-w-5xl px-4",
+          embedded ? "" : "pt-28 pb-16",
+        )}
+      >
+        {!token ? (
+          <div className="rounded-2xl border border-border bg-card p-6 text-card-foreground">
+            <div className="text-sm text-muted-foreground">
+              Redirecting to{" "}
+              <Link href="/login" className="underline underline-offset-4">
+                login
+              </Link>
+              …
             </div>
           </div>
-        </>
-      )}
+        ) : (
+          <>
+            {!embedded && (
+              <>
+                {/* Breadcrumb Navigation */}
+                <Breadcrumb className="mb-6">
+                  <BreadcrumbList>
+                    <BreadcrumbItem>
+                      <BreadcrumbLink asChild>
+                        <Link href="/" className="flex items-center gap-1.5">
+                          <Home className="size-4" />
+                          <span>Home</span>
+                        </Link>
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      <BreadcrumbLink asChild>
+                        <Link href="/dashboard">Dashboard</Link>
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      <BreadcrumbPage>Status</BreadcrumbPage>
+                    </BreadcrumbItem>
+                  </BreadcrumbList>
+                </Breadcrumb>
 
-      <div className="mt-8 rounded-2xl border border-border bg-card text-card-foreground">
-        <div className="border-b border-border px-6 py-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Status Overview</h2>
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 p-1">
-              <button
-                onClick={() => setViewMode("per-check")}
-                className={`cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  viewMode === "per-check"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Per Check
-              </button>
-              <button
-                onClick={() => setViewMode("per-day")}
-                className={`cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  viewMode === "per-day"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Per Day
-              </button>
-            </div>
-          </div>
-        </div>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="space-y-1">
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                      Website Status
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                      Monitor the uptime status of your websites.
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
 
-        <div className="px-6 py-4">
-          {!token ? null : statusQuery.isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : statusQuery.isError ? (
-            <p className="text-sm text-muted-foreground">
-              Couldn’t load status right now.{" "}
-              <Link href="/dashboard" className="underline underline-offset-4">
-                Go back to dashboard
-              </Link>
-              .
-            </p>
-          ) : !statusQuery.data?.websites?.length ? (
-            <p className="text-sm text-muted-foreground">
-              No websites found.{" "}
-              <Link href="/dashboard" className="underline underline-offset-4">
-                Add your first website
-              </Link>
-              .
-            </p>
-          ) : processedWebsites.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No status data available yet. Checks will appear here once
-              monitoring begins.
-            </p>
-          ) : (
-            <div className="space-y-8">
-              {processedWebsites.map(
-                ({
-                  website,
-                  trackerData,
-                  checksInWindow,
-                  daysInWindow,
-                  hasData,
-                  badge,
-                  hasCloudflareBlock,
-                }) => (
-                  <div key={website.websiteId} className="space-y-2">
-                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium">
-                          {website.websiteName || website.websiteUrl}
-                        </div>
-                        <a
-                          href={website.websiteUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="truncate text-sm text-muted-foreground underline underline-offset-4"
-                        >
-                          {website.websiteUrl}
-                        </a>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {badge.isUp ? (
-                          <div
-                            className={badge.className}
-                            title={badge.tooltip}
-                          >
-                            <div className="flex items-center gap-1.5">
-                              <div className="relative size-4 shrink-0">
-                                <div className="absolute inset-[1px] rounded-full bg-emerald-500/20 dark:bg-emerald-600/20" />
-                                <div className="absolute inset-1 rounded-full bg-emerald-600 dark:bg-emerald-500" />
+            <div className="mt-8 rounded-2xl border border-border bg-card text-card-foreground">
+              <div className="border-b border-border px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Status Overview</h2>
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 p-1">
+                    <button
+                      onClick={() => setViewMode("per-check")}
+                      className={`cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        viewMode === "per-check"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Per Check
+                    </button>
+                    <button
+                      onClick={() => setViewMode("per-day")}
+                      className={`cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        viewMode === "per-day"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Per Day
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-4">
+                {statusQuery.isLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading…</p>
+                ) : statusQuery.isError ? (
+                  <p className="text-sm text-muted-foreground">
+                    Couldn’t load status right now.{" "}
+                    <Link
+                      href="/dashboard"
+                      className="underline underline-offset-4"
+                    >
+                      Go back to dashboard
+                    </Link>
+                    .
+                  </p>
+                ) : !statusQuery.data?.websites?.length ? (
+                  <p className="text-sm text-muted-foreground">
+                    No websites found.{" "}
+                    <Link
+                      href="/dashboard"
+                      className="underline underline-offset-4"
+                    >
+                      Add your first website
+                    </Link>
+                    .
+                  </p>
+                ) : processedWebsites.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No status data available yet. Checks will appear here once
+                    monitoring begins.
+                  </p>
+                ) : (
+                  <div className="space-y-8">
+                    {processedWebsites.map(
+                      ({
+                        website,
+                        trackerData,
+                        checksInWindow,
+                        daysInWindow,
+                        hasData,
+                        badge,
+                        hasCloudflareBlock,
+                      }) => (
+                        <div key={website.websiteId} className="space-y-2">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-medium">
+                                {website.websiteName || website.websiteUrl}
                               </div>
-                              <span className="text-xs text-gray-700 dark:text-gray-50">
-                                {badge.label}
-                              </span>
+                              <a
+                                href={website.websiteUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="truncate text-sm text-muted-foreground underline underline-offset-4"
+                              >
+                                {website.websiteUrl}
+                              </a>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {badge.isUp ? (
+                                <div
+                                  className={badge.className}
+                                  title={badge.tooltip}
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="relative size-4 shrink-0">
+                                      <div className="absolute inset-[1px] rounded-full bg-emerald-500/20 dark:bg-emerald-600/20" />
+                                      <div className="absolute inset-1 rounded-full bg-emerald-600 dark:bg-emerald-500" />
+                                    </div>
+                                    <span className="text-xs text-gray-700 dark:text-gray-50">
+                                      {badge.label}
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div
+                                  className={`flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium ${badge.className}`}
+                                  title={badge.tooltip}
+                                >
+                                  <span className="inline-block size-2 rounded-full bg-current" />
+                                  <span>{badge.label}</span>
+                                </div>
+                              )}
+                              {hasData && (
+                                <div className="text-sm text-muted-foreground">
+                                  {viewMode === "per-day"
+                                    ? `${daysInWindow} day${daysInWindow !== 1 ? "s" : ""}`
+                                    : `${checksInWindow}/${TRACKER_CONFIG.SLOT_COUNT} check${checksInWindow !== 1 ? "s" : ""}`}
+                                </div>
+                              )}
                             </div>
                           </div>
-                        ) : (
-                          <div
-                            className={`flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium ${badge.className}`}
-                            title={badge.tooltip}
-                          >
-                            <span className="inline-block size-2 rounded-full bg-current" />
-                            <span>{badge.label}</span>
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">
+                              {viewMode === "per-day"
+                                ? `Last ${TRACKER_CONFIG.DAY_WINDOW_COUNT} days`
+                                : `Last ${TRACKER_CONFIG.WINDOW_MINUTES} minutes (${TRACKER_CONFIG.CHECK_INTERVAL_MINUTES}-minute intervals)`}
+                            </p>
+                            <Tracker data={trackerData} hoverEffect={hasData} />
                           </div>
-                        )}
-                        {hasData && (
-                          <div className="text-sm text-muted-foreground">
-                            {viewMode === "per-day"
-                              ? `${daysInWindow} day${daysInWindow !== 1 ? "s" : ""}`
-                              : `${checksInWindow}/${TRACKER_CONFIG.SLOT_COUNT} check${checksInWindow !== 1 ? "s" : ""}`}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">
-                        {viewMode === "per-day"
-                          ? `Last ${TRACKER_CONFIG.DAY_WINDOW_COUNT} days`
-                          : `Last ${TRACKER_CONFIG.WINDOW_MINUTES} minutes (${TRACKER_CONFIG.CHECK_INTERVAL_MINUTES}-minute intervals)`}
-                      </p>
-                      <Tracker data={trackerData} hoverEffect={hasData} />
-                    </div>
-                    {hasCloudflareBlock && (
-                      <Alert className="border-amber-500/50 bg-amber-500/10">
-                        <AlertDescription className="text-amber-700 dark:text-amber-400">
-                          <span className="font-medium">
-                            Cloudflare detected:
-                          </span>{" "}
-                          We&apos;re receiving a 403 Forbidden response. For
-                          accurate monitoring, disable the Cloudflare proxy
-                          (orange cloud → gray cloud).
-                        </AlertDescription>
-                      </Alert>
+                          {hasCloudflareBlock && (
+                            <Alert className="border-amber-500/50 bg-amber-500/10">
+                              <AlertDescription className="text-amber-700 dark:text-amber-400">
+                                <span className="font-medium">
+                                  Cloudflare detected:
+                                </span>{" "}
+                                We&apos;re receiving a 403 Forbidden response.
+                                For accurate monitoring, disable the Cloudflare
+                                proxy (orange cloud → gray cloud).
+                              </AlertDescription>
+                            </Alert>
+                          )}
+                          {!hasData ? (
+                            <div className="text-sm text-muted-foreground">
+                              No status data available yet. Checks will appear
+                              here once monitoring begins.
+                            </div>
+                          ) : null}
+                        </div>
+                      ),
                     )}
-                    {!hasData ? (
-                      <div className="text-sm text-muted-foreground">
-                        No status data available yet. Checks will appear here
-                        once monitoring begins.
-                      </div>
-                    ) : null}
                   </div>
-                ),
-              )}
+                )}
+              </div>
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

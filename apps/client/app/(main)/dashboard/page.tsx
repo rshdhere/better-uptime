@@ -1,7 +1,7 @@
 "use client";
 
 import { Instrument_Serif } from "next/font/google";
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -69,12 +69,6 @@ export default function DashboardPage() {
     }
   }, [router, token]);
 
-  const websitesQuery = trpc.website.status.useQuery(undefined, {
-    enabled: !!token,
-    retry: false,
-    refetchInterval: 60_000,
-  });
-
   const registerWebsite = trpc.website.register.useMutation({
     onSuccess: async () => {
       toast.success("Monitor created", {
@@ -108,7 +102,7 @@ export default function DashboardPage() {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     registerWebsite.mutate({
       url: url.trim(),
@@ -116,15 +110,13 @@ export default function DashboardPage() {
     });
   };
 
-  const websites = websitesQuery.data?.websites ?? [];
-
   return (
     <div className="space-y-8 py-8">
       {/* Page Header + Breadcrumbs */}
       <div className="px-6 space-y-2">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h1
-            className={`${instrumentSerif.className} text-3xl font-bold tracking-tight text-foreground`}
+            className={`${instrumentSerif.className} text-4xl font-bold tracking-tight text-foreground`}
           >
             Monitors
           </h1>
