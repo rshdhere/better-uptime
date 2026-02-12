@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
-import { Search, ChevronDown } from "lucide-react";
+import { Search, ChevronDown, BarChart3 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
@@ -102,6 +103,12 @@ export default function DashboardPage() {
   };
 
   const websites = websitesQuery.data?.websites ?? [];
+  const upCount = websites.filter(
+    (w) => w.currentStatus?.status === "UP",
+  ).length;
+  const downCount = websites.filter(
+    (w) => w.currentStatus?.status === "DOWN",
+  ).length;
 
   return (
     <div className="space-y-8 py-8">
@@ -121,6 +128,12 @@ export default function DashboardPage() {
           <CreateMonitorDropdown
             onCreateClick={() => setIsCreating(!isCreating)}
           />
+          <Button asChild variant="secondary" className="shrink-0">
+            <Link href="/status">
+              <BarChart3 className="mr-2 size-4" aria-hidden />
+              Status
+            </Link>
+          </Button>
         </div>
       </div>
 
@@ -200,6 +213,34 @@ export default function DashboardPage() {
               />
             ))
           )}
+        </div>
+      </div>
+
+      {/* Status integration */}
+      <div className="px-6">
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h3 className="text-lg font-semibold text-foreground">
+                Status Overview
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                See uptime history and recent checks for all monitors.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="rounded-lg bg-muted px-3 py-2 text-sm font-medium text-foreground">
+                {upCount} Up
+              </div>
+              <div className="rounded-lg bg-muted px-3 py-2 text-sm font-medium text-foreground">
+                {downCount} Down
+              </div>
+              <Button asChild variant="primary">
+                <Link href="/status">Open Status</Link>
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
