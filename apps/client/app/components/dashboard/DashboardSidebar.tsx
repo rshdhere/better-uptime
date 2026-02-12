@@ -57,20 +57,9 @@ export function DashboardSidebar() {
   const user = { name: "User", email: "user@example.com" };
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-50 hidden md:flex w-64 flex-col border-r border-border/50 bg-(--sidebar-bg) transition-all">
-      {/* Header / Logo */}
-      <div className="flex h-16 items-center px-4">
-        <Link
-          href="/"
-          className="flex items-center gap-2 font-bold text-xl tracking-tight text-foreground"
-        >
-          <Activity className="size-6 text-(--coral-accent)" />
-          <span>NIGHTWATCH</span>
-        </Link>
-      </div>
-
+    <aside className="fixed inset-y-0 left-0 z-50 hidden md:flex w-64 flex-col border-r border-border/50 bg-(--sidebar-bg) transition-all overflow-hidden flex-shrink-0">
       {/* Quick Create Button */}
-      <div className="px-3 py-2">
+      <div className="flex-shrink-0 px-3 pt-4 pb-2">
         <Button
           variant="primary"
           className="w-full justify-start gap-2 font-medium shadow-sm hover:shadow-md transition-all"
@@ -81,7 +70,7 @@ export function DashboardSidebar() {
       </div>
 
       {/* Main Navigation */}
-      <nav className="flex-1 space-y-0.5 px-3 py-4">
+      <nav className="flex-1 space-y-0.5 px-3 py-4 overflow-y-auto min-h-0">
         {NAV_ITEMS.map((item) => {
           const isActive = item.exact
             ? pathname === item.href
@@ -106,7 +95,7 @@ export function DashboardSidebar() {
       </nav>
 
       {/* Bottom Actions */}
-      <div className="border-t border-border/50 p-3 space-y-1">
+      <div className="flex-shrink-0 border-t border-border/50 p-3 space-y-1">
         <Link
           href="/dashboard/settings"
           className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
@@ -134,11 +123,15 @@ export function DashboardSidebar() {
         </button>
       </div>
 
-      {/* User Profile */}
-      <div className="border-t border-border/50 p-3">
+      {/* User Profile - flex-shrink-0 so it stays visible at bottom */}
+      <div className="flex-shrink-0 border-t border-border/50 p-3 bg-(--sidebar-bg)">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex w-full items-center gap-3 rounded-md p-2 text-left transition-colors hover:bg-sidebar-accent/50 outline-none">
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 rounded-md p-2 text-left transition-colors hover:bg-sidebar-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label="Open user menu"
+            >
               <div className="size-8 rounded-full bg-sidebar-accent flex items-center justify-center text-xs font-semibold text-sidebar-accent-foreground">
                 {user.name.charAt(0)}
               </div>

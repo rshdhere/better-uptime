@@ -44,7 +44,7 @@ export function MonitorCard({ website, onDelete }: MonitorCardProps) {
     : "Never";
 
   return (
-    <div className="group relative flex items-center justify-between rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:border-(--coral-accent)/20 hover:shadow-md">
+    <div className="group relative flex items-center justify-between rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:border-primary-action/20 hover:shadow-md">
       <div className="flex items-center gap-4">
         {/* Status Indicator */}
         <div className="relative flex size-3 items-center justify-center">
@@ -63,7 +63,7 @@ export function MonitorCard({ website, onDelete }: MonitorCardProps) {
           <Link
             href={website.websiteUrl}
             target="_blank"
-            className="font-medium text-foreground hover:underline hover:decoration-(--coral-accent) hover:underline-offset-4"
+            className="font-medium text-foreground hover:underline hover:decoration-primary-action hover:underline-offset-4"
           >
             {website.websiteName ||
               website.websiteUrl.replace(/^https?:\/\//, "")}

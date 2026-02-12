@@ -208,11 +208,11 @@ export default function DashboardPage() {
         <h3 className="mb-4 text-lg font-semibold text-foreground">
           Get the most out of Better Stack
         </h3>
-        <div className="rounded-xl border border-(--coral-accent)/20 bg-(--coral-accent)/5 p-6 dark:bg-(--coral-accent)/10">
+        <div className="rounded-xl border border-primary-action/20 bg-primary-action/5 p-6 dark:bg-primary-action/10">
           <div className="flex items-start justify-between">
             <div className="flex gap-4">
-              <div className="mt-1 flex size-8 items-center justify-center rounded-full border-2 border-(--coral-accent) text-(--coral-accent)">
-                <div className="size-2 rounded-full bg-(--coral-accent)" />
+              <div className="mt-1 flex size-8 items-center justify-center rounded-full border-2 border-primary-action text-primary-action">
+                <div className="size-2 rounded-full bg-primary-action" />
               </div>
               <div>
                 <h4 className="font-semibold text-foreground">

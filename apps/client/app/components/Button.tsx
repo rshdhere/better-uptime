@@ -18,10 +18,10 @@ const buttonVariants = tv({
     variant: {
       primary: [
         "border-transparent",
-        "text-white",
-        "bg-[var(--coral-accent)]",
-        "hover:bg-[var(--coral-accent)]/90",
-        "disabled:opacity-50 disabled:bg-[var(--coral-accent)]/50",
+        "text-primary-action-foreground",
+        "bg-primary-action",
+        "hover:bg-primary-action/90",
+        "disabled:opacity-50 disabled:bg-primary-action/50",
       ],
       secondary: [
         "border-border",

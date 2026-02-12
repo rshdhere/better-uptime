@@ -112,8 +112,8 @@ export default function NewStatusPage() {
                   key={site.websiteId}
                   className={`flex items-center gap-3 rounded-lg border p-3 transition-colors cursor-pointer ${
                     selectedMonitors.includes(site.websiteId)
-                      ? "border-[var(--coral-accent)] bg-[var(--coral-accent)]/5"
-                      : "border-border hover:bg-stone-50 dark:hover:bg-stone-900"
+                      ? "border-primary-action bg-primary-action/5"
+                      : "border-border hover:bg-muted"
                   }`}
                   onClick={() => toggleMonitor(site.websiteId)}
                 >
@@ -121,7 +121,7 @@ export default function NewStatusPage() {
                     type="checkbox"
                     checked={selectedMonitors.includes(site.websiteId)}
                     onChange={() => {}} // Handled by div click
-                    className="size-4 rounded border-gray-300 text-[var(--coral-accent)] focus:ring-[var(--coral-accent)]"
+                    className="size-4 rounded border-border text-primary-action focus:ring-2 focus:ring-ring"
                   />
                   <div className="flex-1">
                     <div className="font-medium">
@@ -151,10 +151,7 @@ export default function NewStatusPage() {
           >
             Cancel
           </Button>
-          <Button
-            type="submit"
-            className="bg-[var(--coral-accent)] hover:bg-[var(--coral-accent)]/90 text-white"
-          >
+          <Button type="submit" variant="primary">
             Create Status Page
           </Button>
         </div>
