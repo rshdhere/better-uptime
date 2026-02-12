@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Home, Search, BarChart3 } from "lucide-react";
+import { Home, Search } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
@@ -114,9 +114,27 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8 py-8">
-      {/* Breadcrumbs */}
-      <div className="px-6">
-        <Breadcrumb className="mb-4">
+      {/* Page Header + Breadcrumbs */}
+      <div className="px-6 space-y-2">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            Monitors
+          </h1>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Search"
+                className="pl-9 bg-muted/50 border-border"
+              />
+            </div>
+            <CreateMonitorDropdown
+              onCreateClick={() => setIsCreating(!isCreating)}
+            />
+          </div>
+        </div>
+
+        <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
               <BreadcrumbLink asChild>
@@ -138,31 +156,6 @@ export default function DashboardPage() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
-      </div>
-
-      {/* Page Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-6">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Monitors
-        </h1>
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Search"
-              className="pl-9 bg-muted/50 border-border"
-            />
-          </div>
-          <CreateMonitorDropdown
-            onCreateClick={() => setIsCreating(!isCreating)}
-          />
-          <Button asChild variant="secondary" className="shrink-0">
-            <Link href="/status">
-              <BarChart3 className="mr-2 size-4" aria-hidden />
-              Monitor
-            </Link>
-          </Button>
-        </div>
       </div>
 
       {/* Creation Form (Inline) */}

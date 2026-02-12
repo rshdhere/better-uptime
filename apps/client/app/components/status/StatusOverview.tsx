@@ -583,8 +583,8 @@ export function StatusOverview({ embedded = false }: StatusOverviewProps) {
   return (
     <div
       className={cx(
-        "relative mx-auto w-full max-w-5xl px-4",
-        embedded ? "py-0" : "pt-28 pb-16",
+        "relative",
+        embedded ? "w-full" : "mx-auto w-full max-w-5xl px-4 pt-28 pb-16",
       )}
     >
       {!embedded && (
