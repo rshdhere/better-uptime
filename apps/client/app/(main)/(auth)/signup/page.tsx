@@ -104,7 +104,7 @@ export default function SignupPage() {
         <div className="w-full max-w-sm space-y-6 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center">
             <svg
-              className="h-10 w-10 animate-spin text-gray-400"
+              className="h-10 w-10 animate-spin text-muted-foreground"
               fill="none"
               viewBox="0 0 24 24"
             >
@@ -126,23 +126,21 @@ export default function SignupPage() {
 
           <div className="space-y-2">
             <h1 className="text-2xl font-semibold">Check your email</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               We&apos;ve sent a verification link to{" "}
-              <span className="font-medium text-gray-900 dark:text-white">
-                {sentToEmail}
-              </span>
+              <span className="font-medium text-foreground">{sentToEmail}</span>
             </p>
           </div>
 
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-muted-foreground">
             Click the link in the email to verify your account. The link will
             expire in 24 hours.
           </p>
 
-          <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-center text-sm text-muted-foreground">
             <Link
               href="/login"
-              className="font-medium text-black hover:underline dark:text-white"
+              className="font-medium text-foreground hover:underline"
             >
               Back to login
             </Link>
@@ -157,7 +155,7 @@ export default function SignupPage() {
       <div className="w-full max-w-sm space-y-6">
         <div className="space-y-2 text-center">
           <h1 className="text-2xl font-semibold">Create an account</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-muted-foreground">
             Enter your details to get started
           </p>
         </div>
@@ -186,10 +184,10 @@ export default function SignupPage() {
 
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-gray-300 dark:border-gray-700" />
+            <span className="w-full border-t border-border" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-gray-500 dark:bg-gray-950 dark:text-gray-400">
+            <span className="bg-background px-2 text-muted-foreground">
               Or continue with email
             </span>
           </div>
@@ -207,7 +205,7 @@ export default function SignupPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:focus:ring-gray-100"
+              className="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
             />
           </div>
 
@@ -222,9 +220,9 @@ export default function SignupPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:focus:ring-gray-100"
+              className="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background"
             />
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+            <p className="text-xs text-muted-foreground">
               8-24 chars, uppercase, lowercase, number, special char
             </p>
           </div>
@@ -234,11 +232,11 @@ export default function SignupPage() {
           </Button>
         </form>
 
-        <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+        <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
           <Link
             href="/login"
-            className="font-medium text-black hover:underline"
+            className="font-medium text-foreground hover:underline"
           >
             Log in
           </Link>

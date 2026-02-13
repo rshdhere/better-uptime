@@ -42,7 +42,7 @@ export default function Hero() {
     >
       <h1
         id="hero-title"
-        className={`${instrumentSerif.className} inline-block animate-slide-up-fade bg-gradient-to-br from-gray-900 to-gray-800 bg-clip-text p-2 text-4xl font-bold text-transparent sm:text-6xl md:text-7xl dark:from-gray-50 dark:to-gray-300`}
+        className={`${instrumentSerif.className} inline-block animate-slide-up-fade bg-gradient-to-br from-foreground to-foreground/80 bg-clip-text p-2 text-4xl font-bold text-transparent sm:text-6xl md:text-7xl`}
         style={{ animationDuration: "700ms" }}
       >
         The better-uptime
@@ -50,7 +50,7 @@ export default function Hero() {
         for your SaaS monitoring
       </h1>
       <p
-        className="mt-6 max-w-lg animate-slide-up-fade text-lg text-gray-700 dark:text-gray-400"
+        className="mt-6 max-w-lg animate-slide-up-fade text-lg text-muted-foreground"
         style={{ animationDuration: "900ms" }}
       >
         uptiqué is an uptime monitoring platform built for modern SaaS teams and
@@ -72,13 +72,13 @@ export default function Hero() {
         >
           <Link
             href="https://youtu.be/iGbZi3O-8uY"
-            className="ring-1 ring-gray-200 sm:ring-0 dark:ring-gray-900"
+            className="text-foreground ring-1 ring-border sm:ring-0"
             target="_blank"
           >
-            <span className="mr-1 flex size-6 items-center justify-center rounded-full bg-gray-50 transition-all group-hover:bg-gray-200 dark:bg-gray-800 dark:group-hover:bg-gray-700">
+            <span className="mr-1 flex size-6 items-center justify-center rounded-full bg-muted transition-all group-hover:bg-accent">
               <RiPlayCircleFill
                 aria-hidden="true"
-                className="size-5 shrink-0 text-gray-900 dark:text-gray-50"
+                className="size-5 shrink-0 text-foreground"
               />
             </span>
             Watch video
@@ -91,7 +91,7 @@ export default function Hero() {
       >
         <HeroImage />
         <div
-          className="absolute inset-x-0 -bottom-20 -mx-10 h-2/4 bg-gradient-to-t from-white via-white to-transparent lg:h-1/4 dark:from-gray-950 dark:via-gray-950"
+          className="absolute inset-x-0 -bottom-20 -mx-10 h-2/4 bg-gradient-to-t from-background via-background to-transparent lg:h-1/4"
           aria-hidden="true"
         />
       </div>

@@ -5,8 +5,8 @@ import ThemedImage from "./ThemedImage";
 export default function HeroImage() {
   return (
     <section aria-label="Hero Image of the website" className="flow-root">
-      <div className="rounded-2xl bg-slate-50/40 p-2 ring-1 ring-inset ring-slate-200/50 dark:bg-gray-900/70 dark:ring-white/10">
-        <div className="rounded-xl bg-white ring-1 ring-slate-900/5 dark:bg-slate-950 dark:ring-white/15">
+      <div className="rounded-2xl bg-muted/40 p-2 ring-1 ring-inset ring-border/50">
+        <div className="rounded-xl bg-card ring-1 ring-border">
           <ThemedImage
             lightSrc="/images/hero-light.webp"
             darkSrc="/images/hero-dark.webp"

@@ -25,6 +25,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/DropdownMenu";
+import ThemeSwitch from "@/components/ThemeSwitch";
 
 const NAV_ITEMS = [
   {
@@ -55,7 +56,7 @@ export function DashboardSidebar() {
   const user = useDashboardUser();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-50 hidden md:flex w-64 flex-col border-r border-border/50 bg-(--sidebar-bg) transition-all overflow-hidden shrink-0">
+    <aside className="fixed inset-y-0 left-0 z-50 hidden md:flex w-64 flex-col border-r border-border bg-sidebar-bg transition-all overflow-hidden shrink-0">
       {/* Quick Create Button */}
       <div className="shrink-0 px-3 pt-4 pb-2">
         <Button
@@ -93,7 +94,13 @@ export function DashboardSidebar() {
       </nav>
 
       {/* Bottom Actions */}
-      <div className="shrink-0 border-t border-border/50 p-3 space-y-3">
+      <div className="shrink-0 border-t border-border p-3 space-y-3">
+        <div className="flex items-center gap-2 px-3 py-2">
+          <span className="text-xs font-medium text-muted-foreground">
+            Theme
+          </span>
+          <ThemeSwitch />
+        </div>
         <Link
           href="/dashboard/settings"
           className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
@@ -111,12 +118,12 @@ export function DashboardSidebar() {
       </div>
 
       {/* User Profile - shrink-0 so it stays visible at bottom */}
-      <div className="shrink-0 border-t border-border/50 p-3 bg-(--sidebar-bg)">
+      <div className="shrink-0 border-t border-border p-3 bg-sidebar-bg">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex w-full items-center gap-3 rounded-md p-2 text-left transition-colors hover:bg-sidebar-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="flex w-full items-center gap-3 rounded-md p-2 text-left transition-colors hover:bg-sidebar-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar-bg"
               aria-label="Open user menu"
             >
               {user.avatarUrl ? (

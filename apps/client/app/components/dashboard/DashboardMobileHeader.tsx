@@ -17,12 +17,12 @@ export function DashboardMobileHeader() {
   const user = useDashboardUser();
 
   return (
-    <header className="sticky top-0 z-40 flex md:hidden h-14 items-center justify-end border-b border-border/50 bg-(--sidebar-bg) px-4">
+    <header className="sticky top-0 z-40 flex md:hidden h-14 items-center justify-end border-b border-border bg-sidebar-bg px-4">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex items-center gap-2 rounded-lg p-2 text-left transition-colors hover:bg-sidebar-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="flex items-center gap-2 rounded-lg p-2 text-left transition-colors hover:bg-sidebar-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar-bg"
             aria-label="Open user menu"
           >
             {user.avatarUrl ? (
