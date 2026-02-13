@@ -24,9 +24,21 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.className} min-h-screen scroll-auto antialiased selection:bg-indigo-100 selection:text-indigo-700 bg-background text-foreground dark:bg-gray-950`}
+        className={`${inter.className} min-h-screen scroll-auto antialiased bg-background text-foreground`}
       >
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+        {/* Run before React: apply dark class from localStorage so first paint is correct */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var t=localStorage.getItem('theme');var r=t==='system'||!t?(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):t;document.documentElement.classList.toggle('dark',r==='dark');})();`,
+          }}
+        />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          storageKey="theme"
+          disableTransitionOnChange
+        >
           <TRPCProvider>{children}</TRPCProvider>
         </ThemeProvider>
       </body>
