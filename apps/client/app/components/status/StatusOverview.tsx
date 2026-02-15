@@ -295,7 +295,7 @@ export function StatusOverview({ embedded = false }: StatusOverviewProps) {
         tooltip,
         hoverEffect: true,
         hoverCardClassName: isUp
-          ? "border-indigo-600/30 bg-indigo-600/10 text-indigo-600 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300"
+          ? "border-indigo-600/30 bg-indigo-600/10 text-indigo-600 dark:border-indigo-500/30 dark:bg-white/10 dark:text-indigo-300"
           : "border-destructive/20 bg-destructive/10 text-destructive",
       } satisfies TrackerBlockProps;
     });
