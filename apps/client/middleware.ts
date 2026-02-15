@@ -9,6 +9,7 @@ import {
 const EXCLUDED_PATH_PREFIXES = [
   "/_next",
   "/api",
+  "/trpc",
   "/favicon.ico",
   "/robots.txt",
 ];
