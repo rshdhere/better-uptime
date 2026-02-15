@@ -20,22 +20,11 @@ export interface UptimeEventRecord {
 
 let client: ClickHouseClient | null = null;
 let schemaReadyPromise: Promise<void> | null = null;
-// Track when schema was last verified to implement cache TTL
 let schemaVerifiedAt: number | null = null;
-
 const CLICKHOUSE_SCHEMA_TIMEOUT_MS = 10_000;
-// Cap query wait so the status API never feels sluggish
 const CLICKHOUSE_QUERY_TIMEOUT_MS = 3_000;
-// Cache TTL for schema verification - re-verify ClickHouse connectivity periodically
-const SCHEMA_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const SCHEMA_CACHE_TTL_MS = 5 * 60 * 1000;
 
-/**
- * Convert a Date to ClickHouse DateTime64 format.
- * ClickHouse expects: 'YYYY-MM-DD HH:mm:ss.SSS' (space separator, no 'T' or 'Z')
- * JavaScript toISOString() returns: 'YYYY-MM-DDTHH:mm:ss.SSSZ'
- *
- * This utility centralizes the conversion to prevent brittle inline replacements.
- */
 function toClickHouseDateTime64(date: Date): string {
   return date.toISOString().replace("T", " ").replace("Z", "");
 }
@@ -82,8 +71,6 @@ function getClient(): ClickHouseClient {
 }
 
 async function ensureSchema(): Promise<void> {
-  // Invalidate cache after TTL to periodically re-verify ClickHouse connectivity
-  // This ensures we detect if ClickHouse becomes unreachable after initial success
   if (schemaVerifiedAt && Date.now() - schemaVerifiedAt > SCHEMA_CACHE_TTL_MS) {
     schemaReadyPromise = null;
   }
@@ -97,8 +84,6 @@ async function ensureSchema(): Promise<void> {
 
     const clickhouse = getClient();
 
-    // CRITICAL: Wrap schema commands in timeout to prevent indefinite hangs
-    // If ClickHouse is unreachable, this will throw after 10s instead of hanging forever
     await withTimeout(
       clickhouse.command({
         query: `
@@ -119,7 +104,6 @@ async function ensureSchema(): Promise<void> {
       "ClickHouse CREATE TABLE",
     );
 
-    // Add column if table already exists (for migration)
     await withTimeout(
       clickhouse.command({
         query: `
@@ -131,11 +115,8 @@ async function ensureSchema(): Promise<void> {
       "ClickHouse ALTER TABLE",
     );
 
-    // Mark schema as verified after successful creation/verification
     schemaVerifiedAt = Date.now();
   })().catch((error) => {
-    // CRITICAL: Reset schemaReadyPromise on failure so subsequent calls can retry
-    // Without this, a single failure would permanently block all ClickHouse operations
     schemaReadyPromise = null;
     schemaVerifiedAt = null;
     throw error;
@@ -167,33 +148,20 @@ export async function recordUptimeEvent(
   });
 }
 
-// CRITICAL: Hard batch size cap to prevent memory spikes and long event loop blocks
-// Large batches can cause memory pressure and block the event loop during serialization
-// Splitting into chunks ensures ClickHouse writes remain non-blocking
 const CLICKHOUSE_MAX_BATCH_SIZE = 1000;
 
 export async function recordUptimeEvents(
   events: UptimeEventRecord[],
 ): Promise<void> {
-  // CRITICAL: Always call ensureSchema() even for empty arrays
-  // This proves ClickHouse is reachable and serves as the liveness signal
-  // Empty array = no rows to write, but ClickHouse connectivity is verified
   await ensureSchema();
 
-  // Early return AFTER ensureSchema() - liveness is confirmed, nothing to write
   if (events.length === 0) return;
   const clickhouse = getClient();
   const ingestedAt = toClickHouseDateTime64(new Date());
 
-  // Timeout for insert operations - slightly longer than query timeout
-  // Inserts may take longer with large batches
   const INSERT_TIMEOUT_MS = 15_000;
 
-  // PROTECT CLICKHOUSE FROM OVERLOAD:
-  // Split large batches into chunks to prevent memory spikes and event loop blocks
-  // This ensures writes remain non-blocking even with large event volumes
   if (events.length <= CLICKHOUSE_MAX_BATCH_SIZE) {
-    // Small batch - write directly with timeout
     await withTimeout(
       clickhouse.insert({
         table: CLICKHOUSE_METRICS_TABLE,
@@ -212,8 +180,6 @@ export async function recordUptimeEvents(
       "ClickHouse insert",
     );
   } else {
-    // Large batch - split into chunks and write sequentially
-    // Sequential writes prevent overwhelming ClickHouse connection pool
     for (let i = 0; i < events.length; i += CLICKHOUSE_MAX_BATCH_SIZE) {
       const chunk = events.slice(i, i + CLICKHOUSE_MAX_BATCH_SIZE);
       await withTimeout(
@@ -241,10 +207,6 @@ export function getClickhouseClient(): ClickHouseClient {
   return getClient();
 }
 
-/**
- * Query recent status events for a list of website IDs
- * Returns the most recent status checks (up to limit per website)
- */
 export async function getRecentStatusEvents(
   websiteIds: string[],
   limit: number = 90,
@@ -263,7 +225,6 @@ export async function getRecentStatusEvents(
   }
 
   try {
-    // Keep this bounded so a down ClickHouse doesn't hang the API.
     await withTimeout(
       ensureSchema(),
       CLICKHOUSE_SCHEMA_TIMEOUT_MS,
@@ -274,13 +235,10 @@ export async function getRecentStatusEvents(
   }
   const clickhouse = getClient();
 
-  // Escape website IDs for SQL injection safety
   const escapedIds = websiteIds
     .map((id) => `'${id.replace(/'/g, "''")}'`)
     .join(",");
 
-  // Use LIMIT BY to get the most recent events per website
-  // ClickHouse LIMIT BY allows us to get N rows per group efficiently
   const query = `
     SELECT 
       website_id,
