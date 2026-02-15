@@ -88,8 +88,8 @@ function mapWebsiteStatuses(
   const statusByWebsite = new Map<
     string,
     {
-      statusPoints: WebsiteStatusSummary[number]["statusPoints"];
-      currentStatus: WebsiteStatusSummary[number]["currentStatus"];
+      statusPoints: WebsiteStatusSummary["statusPoints"];
+      currentStatus: WebsiteStatusSummary["currentStatus"];
     }
   >();
 
