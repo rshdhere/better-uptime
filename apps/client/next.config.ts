@@ -7,6 +7,11 @@ dotenv.config({
   path: path.resolve(__dirname, "../../packages/config/.env"),
 });
 
+const backendProxyTarget =
+  process.env.INTERNAL_BACKEND_URL ||
+  process.env.NEXT_PUBLIC_API_PROXY_TARGET ||
+  "http://127.0.0.1:8084";
+
 const nextConfig: NextConfig = {
   // Allow user avatars (e.g. GitHub)
   images: {
@@ -27,6 +32,14 @@ const nextConfig: NextConfig = {
     CLIENT_ID_GITHUB: process.env.CLIENT_ID_GITHUB,
     CLIENT_SECRET_GITHUB: process.env.CLIENT_SECRET_GITHUB,
     NEXT_PUBLIC_GITHUB_CLIENT_ID: process.env.CLIENT_ID_GITHUB,
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/trpc/:path*",
+        destination: `${backendProxyTarget}/:path*`,
+      },
+    ];
   },
   experimental: {
     mdxRs: true,

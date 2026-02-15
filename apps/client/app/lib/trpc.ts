@@ -8,8 +8,16 @@ import type { AppRouter } from "server";
 export const trpc = createTRPCReact<AppRouter>();
 
 function getApiUrl() {
-  // Use environment variable or default from config
-  return process.env.NEXT_PUBLIC_API_URL || BACKEND_URL;
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+
+  // In production we proxy /trpc through the frontend origin.
+  if (process.env.NODE_ENV === "production") {
+    return "/trpc";
+  }
+
+  return BACKEND_URL;
 }
 
 export function getTrpcClient() {
@@ -27,13 +35,16 @@ export function getTrpcClient() {
         async fetch(url, options) {
           const response = await fetch(url, options);
 
-          // On 401 UNAUTHORIZED → force logout
+          // On 401 UNAUTHORIZED, force logout only when a token exists.
+          // Public routes should not redirect anonymous visitors to /login.
           if (response.status === 401) {
             if (typeof window !== "undefined") {
-              localStorage.removeItem("token");
-              window.dispatchEvent(new Event("auth-change"));
-              // Redirect to login
-              window.location.href = "/login";
+              const token = localStorage.getItem("token");
+              if (token) {
+                localStorage.removeItem("token");
+                window.dispatchEvent(new Event("auth-change"));
+                window.location.href = "/login";
+              }
             }
           }
 

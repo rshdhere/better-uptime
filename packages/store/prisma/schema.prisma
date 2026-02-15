@@ -12,18 +12,25 @@ enum UptimeStatus {
   DOWN
 }
 
+enum StatusDomainVerificationStatus {
+  PENDING
+  VERIFIED
+  FAILED
+}
+
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
+  id            String       @id @default(cuid())
+  email         String       @unique
   passwordHash  String?
-  emailVerified Boolean   @default(false)
+  emailVerified Boolean      @default(false)
   name          String?
   avatarUrl     String?
-  isActive      Boolean   @default(true)
+  isActive      Boolean      @default(true)
   accounts      Account[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
   website       Website[]
+  statusPages   StatusPage[]
 
   @@index([email])
 }
@@ -53,14 +60,55 @@ model EmailVerificationToken {
 }
 
 model Website {
-  id        String   @id @default(cuid())
-  url       String
-  name      String?
-  isActive  Boolean  @default(true)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String              @id @default(cuid())
+  url                String
+  name               String?
+  isActive           Boolean             @default(true)
+  userId             String
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  statusPageMonitors StatusPageMonitor[]
 
   @@index([userId])
+}
+
+model StatusPage {
+  id          String              @id @default(cuid())
+  name        String
+  slug        String              @unique
+  isPublished Boolean             @default(true)
+  userId      String
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monitors    StatusPageMonitor[]
+  domain      StatusPageDomain?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([userId])
+}
+
+model StatusPageMonitor {
+  statusPageId String
+  websiteId    String
+  createdAt    DateTime   @default(now())
+  statusPage   StatusPage @relation(fields: [statusPageId], references: [id], onDelete: Cascade)
+  website      Website    @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@id([statusPageId, websiteId])
+  @@index([websiteId])
+}
+
+model StatusPageDomain {
+  id                 String                         @id @default(cuid())
+  statusPageId       String                         @unique
+  hostname           String                         @unique
+  verificationToken  String
+  verificationStatus StatusDomainVerificationStatus @default(PENDING)
+  verifiedAt         DateTime?
+  createdAt          DateTime                       @default(now())
+  updatedAt          DateTime                       @updatedAt
+  statusPage         StatusPage                     @relation(fields: [statusPageId], references: [id], onDelete: Cascade)
+
+  @@index([verificationStatus])
 }

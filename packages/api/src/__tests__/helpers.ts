@@ -1,8 +1,16 @@
 import { prismaClient } from "@repo/store";
 import jwt from "jsonwebtoken";
-import type { User, Website } from "@repo/store/generated/prisma";
+import type {
+  StatusPage,
+  StatusPageDomain,
+  User,
+  Website,
+} from "@repo/store/generated/prisma";
+import { Prisma } from "@repo/store/generated/prisma";
 import { userRouter } from "../routes/user.js";
 import { websiteRouter } from "../routes/website.js";
+import { statusPageRouter } from "../routes/status-page.js";
+import { statusDomainRouter } from "../routes/status-domain.js";
 import {
   router,
   createContext,
@@ -16,6 +24,8 @@ import type { IncomingMessage, ServerResponse } from "http";
 const appRouter = router({
   user: userRouter,
   website: websiteRouter,
+  statusPage: statusPageRouter,
+  statusDomain: statusDomainRouter,
 });
 
 export type AppRouter = typeof appRouter;
@@ -23,6 +33,20 @@ export type AppRouter = typeof appRouter;
 // Create caller factory for type-safe test callers
 const createCaller = createCallerFactory(appRouter);
 type RouterCaller = ReturnType<typeof createCaller>;
+
+async function safeDeleteMany(deleteOperation: () => Promise<unknown>) {
+  try {
+    await deleteOperation();
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2021"
+    ) {
+      return;
+    }
+    throw error;
+  }
+}
 
 /**
  * Create a test user directly in the database (bypasses email verification flow)
@@ -98,6 +122,60 @@ export async function createTestWebsite(
 }
 
 /**
+ * Create a test status page for a user
+ */
+export async function createTestStatusPage(
+  userId: string,
+  websiteIds: string[] = [],
+  overrides: Partial<{
+    name: string;
+    slug: string;
+    isPublished: boolean;
+  }> = {},
+): Promise<StatusPage> {
+  return prismaClient.statusPage.create({
+    data: {
+      userId,
+      name: overrides.name || "Test Status Page",
+      slug: overrides.slug || `status-${Date.now()}`,
+      isPublished: overrides.isPublished ?? true,
+      monitors: websiteIds.length
+        ? {
+            createMany: {
+              data: websiteIds.map((websiteId) => ({ websiteId })),
+            },
+          }
+        : undefined,
+    },
+  });
+}
+
+/**
+ * Create a test status page domain mapping
+ */
+export async function createTestStatusDomain(
+  statusPageId: string,
+  overrides: Partial<{
+    hostname: string;
+    verificationToken: string;
+    verificationStatus: "PENDING" | "VERIFIED" | "FAILED";
+    verifiedAt: Date | null;
+  }> = {},
+): Promise<StatusPageDomain> {
+  return prismaClient.statusPageDomain.create({
+    data: {
+      statusPageId,
+      hostname: overrides.hostname || `status.test${Date.now()}.example.com`,
+      verificationToken:
+        overrides.verificationToken || `uptique-${crypto.randomUUID()}`,
+      verificationStatus: overrides.verificationStatus ?? "PENDING",
+      verifiedAt:
+        overrides.verifiedAt !== undefined ? overrides.verifiedAt : null,
+    },
+  });
+}
+
+/**
  * Generate a valid JWT token for a user
  */
 export function generateTestToken(userId: string): string {
@@ -150,8 +228,11 @@ export function createAuthenticatedCaller(userId: string): RouterCaller {
  * Clean up all test data (useful for manual cleanup)
  */
 export async function cleanupTestData(): Promise<void> {
-  await prismaClient.emailVerificationToken.deleteMany();
-  await prismaClient.website.deleteMany();
-  await prismaClient.account.deleteMany();
-  await prismaClient.user.deleteMany();
+  await safeDeleteMany(() => prismaClient.statusPageDomain.deleteMany());
+  await safeDeleteMany(() => prismaClient.statusPageMonitor.deleteMany());
+  await safeDeleteMany(() => prismaClient.statusPage.deleteMany());
+  await safeDeleteMany(() => prismaClient.emailVerificationToken.deleteMany());
+  await safeDeleteMany(() => prismaClient.website.deleteMany());
+  await safeDeleteMany(() => prismaClient.account.deleteMany());
+  await safeDeleteMany(() => prismaClient.user.deleteMany());
 }
