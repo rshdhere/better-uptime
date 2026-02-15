@@ -99,10 +99,10 @@ export default function StatusPagesPage() {
         {/* Create Card (Alternative to button) */}
         <Link
           href="/dashboard/status-pages/new"
-          className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-transparent p-6 text-center text-muted-foreground transition-colors hover:border-primary-action hover:bg-primary-action/5 hover:text-primary-action"
+          className="group flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-transparent p-6 text-center text-muted-foreground transition-colors hover:border-primary-action hover:bg-primary-action/5 hover:text-primary-action"
         >
           <div className="rounded-full bg-muted p-3 group-hover:bg-primary-action/10">
-            <Plus className="size-6" />
+            <Plus className="size-6 text-foreground group-hover:text-foreground" />
           </div>
           <span className="mt-3 font-medium">Create another status page</span>
         </Link>
