@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AlertCircle, ExternalLink } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Tracker, type TrackerBlockProps } from "@/components/Tracker";
+import ThemeSwitch from "../ThemeSwitch";
 
 interface PublicStatusOverviewProps {
   hostname: string;
@@ -83,16 +84,37 @@ function renderStatusBadge(
 
   const label = currentStatus.status === "UP" ? "Up" : "Down";
   const className =
-    currentStatus.status === "UP"
-      ? "border border-primary-action/30 bg-primary-action/10 text-primary-action"
-      : "border border-destructive/30 bg-destructive/10 text-destructive";
+  currentStatus.status === "UP"
+    ? "rounded-full border border-gray-200 py-1 pl-1 pr-2 dark:border-gray-800"
+    : "bg-destructive/10 text-destructive";
+
+  const dotClass =
+  currentStatus.status === "UP"
+    ? "bg-emerald-600 dark:bg-emerald-500"
+    : "bg-red-600 dark:bg-red-500";
+
+  const dotBgClass =
+  currentStatus.status === "UP"
+    ? "bg-emerald-500/20 dark:bg-emerald-600/20"
+    : "bg-red-500/20 dark:bg-red-600/20";
 
   return (
     <div
-      className={`rounded-full px-3 py-1 text-sm font-medium ${className}`}
+      className={`flex items-center gap-1.5 ${className}`}
       title={`Last check: ${formatStatusTime(currentStatus.checkedAt)}`}
     >
-      {label}
+      <div className="relative size-4 shrink-0">
+        <div
+          className={`absolute inset-[1px] rounded-full ${dotBgClass}`}
+        />
+        <div
+          className={`absolute inset-1 rounded-full ${dotClass}`}
+        />
+      </div>
+
+      <span className="text-xs font-medium">
+        {label}
+      </span>
     </div>
   );
 }
@@ -142,13 +164,18 @@ export function PublicStatusOverview({ hostname }: PublicStatusOverviewProps) {
         </div>
       ) : (
         <>
-          <div className="mb-8 rounded-2xl border border-border bg-card p-6 text-card-foreground">
-            <h1 className="text-3xl font-bold tracking-tight">
-              {statusQuery.data.statusPage.name}
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Live status for <span className="font-medium">{hostname}</span>
-            </p>
+          <div className="mb-8 rounded-2xl border border-border bg-card p-6 text-card-foreground flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">
+                {statusQuery.data.statusPage.name}
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Live status for <span className="font-medium">{hostname}</span>
+              </p>
+            </div>
+            <div>
+              <ThemeSwitch />
+            </div>
           </div>
 
           <div className="space-y-6">

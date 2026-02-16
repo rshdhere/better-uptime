@@ -1,4 +1,4 @@
-import Footer from "@/components/ui/Footer";
+
 
 export default function NoNavbarLayout({
   children,
@@ -8,7 +8,6 @@ export default function NoNavbarLayout({
   return (
     <>
       <main className="min-h-screen">{children}</main>
-      <Footer />
     </>
   );
 }
