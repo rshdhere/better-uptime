@@ -1,5 +1,5 @@
 import { Navigation } from "@/components/ui/Navbar";
-import Footer from "@/components/ui/Footer";
+import { ConditionalFooter } from "@/components/ui/ConditionalFooter";
 
 export default function MainLayout({
   children,
@@ -10,7 +10,7 @@ export default function MainLayout({
     <>
       <Navigation />
       <main className="min-h-screen">{children}</main>
-      <Footer />
+      <ConditionalFooter />
     </>
   );
 }
