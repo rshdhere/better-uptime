@@ -22,7 +22,7 @@ export function CreateMonitorDropdown({
       className={cx(
         "inline-flex rounded-xl overflow-hidden",
         "shadow-sm hover:shadow-md transition-shadow duration-200",
-        "ring-1 ring-primary-action/20 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background",
+        "border border-primary-action/30",
       )}
       role="group"
     >
@@ -32,6 +32,7 @@ export function CreateMonitorDropdown({
           "rounded-r-none border-0 border-r border-primary-action-foreground/20",
           "rounded-l-xl shadow-none",
           "hover:bg-primary-action/90 active:bg-primary-action/95",
+          "focus-visible:ring-2 focus-visible:ring-primary-action-foreground/30 focus-visible:ring-inset",
         )}
         onClick={onCreateClick}
       >
