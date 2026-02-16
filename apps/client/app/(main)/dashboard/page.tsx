@@ -9,8 +9,8 @@ import { Home, Search } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
-import { Label } from "@/components/Label";
 import { CreateMonitorDropdown } from "@/components/dashboard/CreateMonitorDropdown";
+import { CreateMonitor } from "@/components/dashboard/CreateMonitor";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -158,48 +158,17 @@ export default function DashboardPage() {
         </Breadcrumb>
       </div>
 
-      {/* Creation Form (Inline) */}
-      {isCreating && (
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm animate-in fade-in slide-in-from-top-4">
-          <h2 className="mb-4 text-lg font-semibold">Create new monitor</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="website-url">URL</Label>
-                <Input
-                  id="website-url"
-                  placeholder="https://example.com"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  required
-                  autoFocus
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="website-name">Name (optional)</Label>
-                <Input
-                  id="website-name"
-                  placeholder="My landing page"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setIsCreating(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" isLoading={registerWebsite.isPending}>
-                Create Monitor
-              </Button>
-            </div>
-          </form>
-        </div>
-      )}
+      {/* Create monitor */}
+      <CreateMonitor
+        open={isCreating}
+        onClose={() => setIsCreating(false)}
+        url={url}
+        onUrlChange={setUrl}
+        name={name}
+        onNameChange={setName}
+        onSubmit={handleSubmit}
+        isSubmitting={registerWebsite.isPending}
+      />
 
       {/* Status Overview (embedded) */}
       <div className="relative min-h-[70vh]">
