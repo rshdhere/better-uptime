@@ -204,7 +204,9 @@ export function PublicStatusOverview({ hostname }: PublicStatusOverviewProps) {
                         <ExternalLink className="size-3" />
                       </a>
                     </div>
-                    {renderStatusBadge(website.currentStatus)}
+                    <div className="flex-shrink-0 self-end sm:self-center">
+                      {renderStatusBadge(website.currentStatus)}
+                    </div>
                   </div>
 
                   <div className="mt-4 space-y-1">
