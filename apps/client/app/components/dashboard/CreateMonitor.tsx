@@ -80,7 +80,6 @@ export function CreateMonitor({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
                   className="size-10 shrink-0 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                   onClick={onClose}
                   aria-label="Close"
