@@ -4,7 +4,11 @@
   "type": "module",
   "scripts": {
     "build": "turbo run build",
+    "predev": "pnpm --filter @repo/store exec bunx prisma migrate status || pnpm run db:deploy",
     "dev": "turbo run dev",
+    "db:migrate": "pnpm --filter @repo/store prisma:migrate",
+    "db:deploy": "pnpm --filter @repo/store prisma:deploy",
+    "db:studio": "pnpm --filter @repo/store prisma:studio",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
