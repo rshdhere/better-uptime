@@ -1,14 +1,22 @@
+# API tests need secrets: DATABASE_URL_TEST, JWT_SECRET, CLIENT_ID_GITHUB, CLIENT_SECRET_GITHUB, RESEND_API_KEY
+# pull_request_target = workflow runs in base repo so fork PRs get access to secrets
 name: Tests
 
 on:
   push:
     branches: [main, develop]
-  pull_request:
+  pull_request_target:
     branches: [main, develop]
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      CLIENT_ID_GITHUB: ${{ secrets.CLIENT_ID_GITHUB }}
+      CLIENT_SECRET_GITHUB: ${{ secrets.CLIENT_SECRET_GITHUB }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
 
     steps:
       - name: Checkout code
@@ -39,12 +47,6 @@ jobs:
 
       - name: Run API tests
         run: pnpm --filter @repo/api test
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          CLIENT_ID_GITHUB: ${{ secrets.CLIENT_ID_GITHUB }}
-          CLIENT_SECRET_GITHUB: ${{ secrets.CLIENT_SECRET_GITHUB }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
 
   lint:
     runs-on: ubuntu-latest
