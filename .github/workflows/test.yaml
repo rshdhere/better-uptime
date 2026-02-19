@@ -1,3 +1,6 @@
+# API tests need these GitHub Actions secrets (Settings > Secrets and variables > Actions):
+#   DATABASE_URL_TEST - Postgres connection string for tests (e.g. Neon or local)
+#   JWT_SECRET, CLIENT_ID_GITHUB, CLIENT_SECRET_GITHUB, RESEND_API_KEY
 name: Tests
 
 on:
@@ -9,6 +12,13 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Required for API tests: set these in repo Settings > Secrets and variables > Actions
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      CLIENT_ID_GITHUB: ${{ secrets.CLIENT_ID_GITHUB }}
+      CLIENT_SECRET_GITHUB: ${{ secrets.CLIENT_SECRET_GITHUB }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
 
     steps:
       - name: Checkout code
@@ -37,14 +47,15 @@ jobs:
       - name: Run validators tests
         run: pnpm --filter @repo/validators test
 
+      - name: Check API test env
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::API tests need DATABASE_URL. Add secret DATABASE_URL_TEST (and JWT_SECRET, etc.) in Repository Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
       - name: Run API tests
         run: pnpm --filter @repo/api test
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          CLIENT_ID_GITHUB: ${{ secrets.CLIENT_ID_GITHUB }}
-          CLIENT_SECRET_GITHUB: ${{ secrets.CLIENT_SECRET_GITHUB }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
 
   lint:
     runs-on: ubuntu-latest

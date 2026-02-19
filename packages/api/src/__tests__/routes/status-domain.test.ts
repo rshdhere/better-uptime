@@ -1,7 +1,15 @@
-import { describe, it, expect, beforeAll } from "bun:test";
+import { describe, it, expect } from "bun:test";
 import { TRPCError } from "@trpc/server";
 import { prismaClient } from "@repo/store";
 import { Prisma } from "@repo/store/generated/prisma";
+import {
+  createAuthenticatedCaller,
+  createTestCaller,
+  createTestStatusDomain,
+  createTestStatusPage,
+  createTestUser,
+  createTestWebsite,
+} from "../helpers.js";
 
 async function hasStatusSchema(): Promise<boolean> {
   try {
@@ -19,23 +27,6 @@ async function hasStatusSchema(): Promise<boolean> {
 }
 
 describe("Status Domain Routes", () => {
-  let createAuthenticatedCaller: typeof import("../helpers.js").createAuthenticatedCaller;
-  let createTestCaller: typeof import("../helpers.js").createTestCaller;
-  let createTestStatusDomain: typeof import("../helpers.js").createTestStatusDomain;
-  let createTestStatusPage: typeof import("../helpers.js").createTestStatusPage;
-  let createTestUser: typeof import("../helpers.js").createTestUser;
-  let createTestWebsite: typeof import("../helpers.js").createTestWebsite;
-
-  beforeAll(async () => {
-    const h = await import("../helpers.js");
-    createAuthenticatedCaller = h.createAuthenticatedCaller;
-    createTestCaller = h.createTestCaller;
-    createTestStatusDomain = h.createTestStatusDomain;
-    createTestStatusPage = h.createTestStatusPage;
-    createTestUser = h.createTestUser;
-    createTestWebsite = h.createTestWebsite;
-  });
-
   describe("requestVerification", () => {
     it(
       "creates DNS verification instructions for a status page",
