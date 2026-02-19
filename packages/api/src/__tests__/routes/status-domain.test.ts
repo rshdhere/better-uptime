@@ -1,6 +1,5 @@
 import { describe, it, expect } from "bun:test";
 import { TRPCError } from "@trpc/server";
-import { prismaClient } from "@repo/store";
 import { Prisma } from "@repo/store/generated/prisma";
 import {
   createAuthenticatedCaller,
@@ -11,9 +10,16 @@ import {
   createTestWebsite,
 } from "../helpers.js";
 
+/** Lazy load to avoid "Cannot access prismaClient before initialization" in CI (circular import). */
+async function getPrisma() {
+  const { prismaClient } = await import("@repo/store");
+  return prismaClient;
+}
+
 async function hasStatusSchema(): Promise<boolean> {
+  const prisma = await getPrisma();
   try {
-    await prismaClient.statusPage.count();
+    await prisma.statusPage.count();
     return true;
   } catch (error) {
     if (
@@ -48,7 +54,7 @@ describe("Status Domain Routes", () => {
       expect(result.cnameRecordName).toBe(hostname);
       expect(result.txtRecordName).toContain(hostname);
 
-      const persisted = await prismaClient.statusPageDomain.findUnique({
+      const persisted = await (await getPrisma()).statusPageDomain.findUnique({
         where: { statusPageId: statusPage.id },
       });
       expect(persisted).not.toBeNull();
