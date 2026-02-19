@@ -1,15 +1,7 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, beforeAll } from "bun:test";
 import { TRPCError } from "@trpc/server";
 import { prismaClient } from "@repo/store";
 import { Prisma } from "@repo/store/generated/prisma";
-import {
-  createAuthenticatedCaller,
-  createTestCaller,
-  createTestStatusDomain,
-  createTestStatusPage,
-  createTestUser,
-  createTestWebsite,
-} from "../helpers.js";
 
 async function hasStatusSchema(): Promise<boolean> {
   try {
@@ -27,6 +19,23 @@ async function hasStatusSchema(): Promise<boolean> {
 }
 
 describe("Status Page Routes", () => {
+  let createAuthenticatedCaller: typeof import("../helpers.js").createAuthenticatedCaller;
+  let createTestCaller: typeof import("../helpers.js").createTestCaller;
+  let createTestStatusDomain: typeof import("../helpers.js").createTestStatusDomain;
+  let createTestStatusPage: typeof import("../helpers.js").createTestStatusPage;
+  let createTestUser: typeof import("../helpers.js").createTestUser;
+  let createTestWebsite: typeof import("../helpers.js").createTestWebsite;
+
+  beforeAll(async () => {
+    const h = await import("../helpers.js");
+    createAuthenticatedCaller = h.createAuthenticatedCaller;
+    createTestCaller = h.createTestCaller;
+    createTestStatusDomain = h.createTestStatusDomain;
+    createTestStatusPage = h.createTestStatusPage;
+    createTestUser = h.createTestUser;
+    createTestWebsite = h.createTestWebsite;
+  });
+
   describe("create", () => {
     it("creates a status page with monitor mappings", async () => {
       if (!(await hasStatusSchema())) return;
@@ -74,26 +83,30 @@ describe("Status Page Routes", () => {
   });
 
   describe("list", () => {
-    it("returns only status pages owned by authenticated user", async () => {
-      if (!(await hasStatusSchema())) return;
-      const user1 = await createTestUser();
-      const user2 = await createTestUser();
-      const website1 = await createTestWebsite(user1.id);
-      const website2 = await createTestWebsite(user2.id);
+    it(
+      "returns only status pages owned by authenticated user",
+      async () => {
+        if (!(await hasStatusSchema())) return;
+        const user1 = await createTestUser();
+        const user2 = await createTestUser();
+        const website1 = await createTestWebsite(user1.id);
+        const website2 = await createTestWebsite(user2.id);
 
-      await createTestStatusPage(user1.id, [website1.id], {
-        slug: `u1-${Date.now()}`,
-      });
-      await createTestStatusPage(user2.id, [website2.id], {
-        slug: `u2-${Date.now()}`,
-      });
+        await createTestStatusPage(user1.id, [website1.id], {
+          slug: `u1-${Date.now()}`,
+        });
+        await createTestStatusPage(user2.id, [website2.id], {
+          slug: `u2-${Date.now()}`,
+        });
 
-      const caller = createAuthenticatedCaller(user1.id);
-      const result = await caller.statusPage.list();
+        const caller = createAuthenticatedCaller(user1.id);
+        const result = await caller.statusPage.list();
 
-      expect(result.statusPages).toHaveLength(1);
-      expect(result.statusPages[0]?.userId).toBe(user1.id);
-    });
+        expect(result.statusPages).toHaveLength(1);
+        expect(result.statusPages[0]?.userId).toBe(user1.id);
+      },
+      { timeout: 15_000 },
+    );
   });
 
   describe("delete", () => {

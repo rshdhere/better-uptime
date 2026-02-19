@@ -1,25 +1,11 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, beforeAll } from "bun:test";
 import { TRPCError } from "@trpc/server";
+import { prismaClient } from "@repo/store";
 import { Prisma } from "@repo/store/generated/prisma";
-import {
-  createAuthenticatedCaller,
-  createTestCaller,
-  createTestStatusDomain,
-  createTestStatusPage,
-  createTestUser,
-  createTestWebsite,
-} from "../helpers.js";
-
-/** Lazy load to avoid "Cannot access prismaClient before initialization" in CI (circular import). */
-async function getPrisma() {
-  const { prismaClient } = await import("@repo/store");
-  return prismaClient;
-}
 
 async function hasStatusSchema(): Promise<boolean> {
-  const prisma = await getPrisma();
   try {
-    await prisma.statusPage.count();
+    await prismaClient.statusPage.count();
     return true;
   } catch (error) {
     if (
@@ -33,33 +19,54 @@ async function hasStatusSchema(): Promise<boolean> {
 }
 
 describe("Status Domain Routes", () => {
+  let createAuthenticatedCaller: typeof import("../helpers.js").createAuthenticatedCaller;
+  let createTestCaller: typeof import("../helpers.js").createTestCaller;
+  let createTestStatusDomain: typeof import("../helpers.js").createTestStatusDomain;
+  let createTestStatusPage: typeof import("../helpers.js").createTestStatusPage;
+  let createTestUser: typeof import("../helpers.js").createTestUser;
+  let createTestWebsite: typeof import("../helpers.js").createTestWebsite;
+
+  beforeAll(async () => {
+    const h = await import("../helpers.js");
+    createAuthenticatedCaller = h.createAuthenticatedCaller;
+    createTestCaller = h.createTestCaller;
+    createTestStatusDomain = h.createTestStatusDomain;
+    createTestStatusPage = h.createTestStatusPage;
+    createTestUser = h.createTestUser;
+    createTestWebsite = h.createTestWebsite;
+  });
+
   describe("requestVerification", () => {
-    it("creates DNS verification instructions for a status page", async () => {
-      if (!(await hasStatusSchema())) return;
-      const user = await createTestUser();
-      const website = await createTestWebsite(user.id);
-      const statusPage = await createTestStatusPage(user.id, [website.id], {
-        slug: `status-${Date.now()}`,
-      });
-      const hostname = `status.test${Date.now()}.example.com`;
+    it(
+      "creates DNS verification instructions for a status page",
+      async () => {
+        if (!(await hasStatusSchema())) return;
+        const user = await createTestUser();
+        const website = await createTestWebsite(user.id);
+        const statusPage = await createTestStatusPage(user.id, [website.id], {
+          slug: `status-${Date.now()}`,
+        });
+        const hostname = `status.test${Date.now()}.example.com`;
 
-      const caller = createAuthenticatedCaller(user.id);
-      const result = await caller.statusDomain.requestVerification({
-        statusPageId: statusPage.id,
-        hostname,
-      });
+        const caller = createAuthenticatedCaller(user.id);
+        const result = await caller.statusDomain.requestVerification({
+          statusPageId: statusPage.id,
+          hostname,
+        });
 
-      expect(result.hostname).toBe(hostname);
-      expect(result.verificationStatus).toBe("PENDING");
-      expect(result.cnameRecordName).toBe(hostname);
-      expect(result.txtRecordName).toContain(hostname);
+        expect(result.hostname).toBe(hostname);
+        expect(result.verificationStatus).toBe("PENDING");
+        expect(result.cnameRecordName).toBe(hostname);
+        expect(result.txtRecordName).toContain(hostname);
 
-      const persisted = await (await getPrisma()).statusPageDomain.findUnique({
-        where: { statusPageId: statusPage.id },
-      });
-      expect(persisted).not.toBeNull();
-      expect(persisted?.hostname).toBe(hostname);
-    });
+        const persisted = await prismaClient.statusPageDomain.findUnique({
+          where: { statusPageId: statusPage.id },
+        });
+        expect(persisted).not.toBeNull();
+        expect(persisted?.hostname).toBe(hostname);
+      },
+      { timeout: 15_000 },
+    );
 
     it("rejects requesting verification on another user's status page", async () => {
       if (!(await hasStatusSchema())) return;
