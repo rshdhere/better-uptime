@@ -1,12 +1,17 @@
 # API tests need these GitHub Actions secrets (Settings > Secrets and variables > Actions):
 #   DATABASE_URL_TEST - Postgres connection string for tests (e.g. Neon or local)
 #   JWT_SECRET, CLIENT_ID_GITHUB, CLIENT_SECRET_GITHUB, RESEND_API_KEY
+#
+# pull_request_target: runs in the BASE repo context so secrets are available for PRs from forks.
+# Security: this checks out and runs the PR's code with base repo secrets; only use with trusted contributors or accept the risk.
 name: Tests
 
 on:
   push:
     branches: [main, develop]
-  pull_request:
+  # pull_request_target runs in BASE repo so secrets are available (including for PRs from forks).
+  # Use this instead of pull_request so API tests can run when contributors open PRs from forks.
+  pull_request_target:
     branches: [main, develop]
 
 jobs:
@@ -46,13 +51,6 @@ jobs:
 
       - name: Run validators tests
         run: pnpm --filter @repo/validators test
-
-      - name: Check API test env
-        run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "::error::API tests need DATABASE_URL. Add secret DATABASE_URL_TEST (and JWT_SECRET, etc.) in Repository Settings > Secrets and variables > Actions."
-            exit 1
-          fi
 
       - name: Run API tests
         run: pnpm --filter @repo/api test

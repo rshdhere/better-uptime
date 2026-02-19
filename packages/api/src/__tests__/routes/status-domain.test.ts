@@ -28,36 +28,32 @@ async function hasStatusSchema(): Promise<boolean> {
 
 describe("Status Domain Routes", () => {
   describe("requestVerification", () => {
-    it(
-      "creates DNS verification instructions for a status page",
-      async () => {
-        if (!(await hasStatusSchema())) return;
-        const user = await createTestUser();
-        const website = await createTestWebsite(user.id);
-        const statusPage = await createTestStatusPage(user.id, [website.id], {
-          slug: `status-${Date.now()}`,
-        });
-        const hostname = `status.test${Date.now()}.example.com`;
+    it("creates DNS verification instructions for a status page", async () => {
+      if (!(await hasStatusSchema())) return;
+      const user = await createTestUser();
+      const website = await createTestWebsite(user.id);
+      const statusPage = await createTestStatusPage(user.id, [website.id], {
+        slug: `status-${Date.now()}`,
+      });
+      const hostname = `status.test${Date.now()}.example.com`;
 
-        const caller = createAuthenticatedCaller(user.id);
-        const result = await caller.statusDomain.requestVerification({
-          statusPageId: statusPage.id,
-          hostname,
-        });
+      const caller = createAuthenticatedCaller(user.id);
+      const result = await caller.statusDomain.requestVerification({
+        statusPageId: statusPage.id,
+        hostname,
+      });
 
-        expect(result.hostname).toBe(hostname);
-        expect(result.verificationStatus).toBe("PENDING");
-        expect(result.cnameRecordName).toBe(hostname);
-        expect(result.txtRecordName).toContain(hostname);
+      expect(result.hostname).toBe(hostname);
+      expect(result.verificationStatus).toBe("PENDING");
+      expect(result.cnameRecordName).toBe(hostname);
+      expect(result.txtRecordName).toContain(hostname);
 
-        const persisted = await prismaClient.statusPageDomain.findUnique({
-          where: { statusPageId: statusPage.id },
-        });
-        expect(persisted).not.toBeNull();
-        expect(persisted?.hostname).toBe(hostname);
-      },
-      { timeout: 15_000 },
-    );
+      const persisted = await prismaClient.statusPageDomain.findUnique({
+        where: { statusPageId: statusPage.id },
+      });
+      expect(persisted).not.toBeNull();
+      expect(persisted?.hostname).toBe(hostname);
+    });
 
     it("rejects requesting verification on another user's status page", async () => {
       if (!(await hasStatusSchema())) return;
