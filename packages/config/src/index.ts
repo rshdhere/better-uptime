@@ -9,36 +9,39 @@ const __dirname = dirname(__filename);
 const envPath = join(__dirname, "..", ".env");
 
 // Use Bun to load the .env file
-const envFile = Bun.file(envPath);
-const envExists = await envFile.exists();
+// Only use Bun loader if running in Bun runtime
+if (typeof Bun !== "undefined") {
+  const envFile = Bun.file(envPath);
+  const envExists = await envFile.exists();
 
-if (envExists) {
-  const envContent = await envFile.text();
+  if (envExists) {
+    const envContent = await envFile.text();
 
-  // Parse and set environment variables
-  for (const line of envContent.split("\n")) {
-    const trimmedLine = line.trim();
+    // Parse and set environment variables
+    for (const line of envContent.split("\n")) {
+      const trimmedLine = line.trim();
 
-    // Skip empty lines and comments
-    if (!trimmedLine || trimmedLine.startsWith("#")) continue;
+      // Skip empty lines and comments
+      if (!trimmedLine || trimmedLine.startsWith("#")) continue;
 
-    const equalIndex = trimmedLine.indexOf("=");
-    if (equalIndex === -1) continue;
+      const equalIndex = trimmedLine.indexOf("=");
+      if (equalIndex === -1) continue;
 
-    const key = trimmedLine.slice(0, equalIndex).trim();
-    let value = trimmedLine.slice(equalIndex + 1).trim();
+      const key = trimmedLine.slice(0, equalIndex).trim();
+      let value = trimmedLine.slice(equalIndex + 1).trim();
 
-    // Remove surrounding quotes if present
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
+      // Remove surrounding quotes if present
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
 
-    // Only set if not already defined (allows runtime override)
-    if (!process.env[key]) {
-      process.env[key] = value;
+      // Only set if not already defined (allows runtime override)
+      if (!process.env[key]) {
+        process.env[key] = value;
+      }
     }
   }
 }
@@ -83,7 +86,7 @@ export const CLICKHOUSE_METRICS_TABLE =
   getEnvVar("CLICKHOUSE_METRICS_TABLE", false) || "uptime_checks";
 
 // Server
-import { BACKEND_PORT as DEFAULT_BACKEND_PORT } from "./constants.js";
+import { BACKEND_PORT as DEFAULT_BACKEND_PORT } from "./constants";
 export const BACKEND_PORT =
   getEnvVar("BACKEND_PORT", false) || String(DEFAULT_BACKEND_PORT);
 

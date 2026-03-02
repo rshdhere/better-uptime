@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@repo/store/generated/prisma";
-import { PrismaNeon } from "@prisma/adapter-neon";
-
-const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL! });
-const prisma = new PrismaClient({ adapter });
+import { prismaClient } from "@repo/store";
 
 function normalizeHostname(rawHostname: string | null): string {
   if (!rawHostname) return "";
@@ -19,7 +15,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const allowedDomain = await prisma.statusPageDomain.findFirst({
+    const allowedDomain = await prismaClient.statusPageDomain.findFirst({
       where: {
         hostname,
         verificationStatus: "VERIFIED",
