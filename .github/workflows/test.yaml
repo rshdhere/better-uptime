@@ -1,3 +1,4 @@
+
 # API tests need secrets: DATABASE_URL_TEST, JWT_SECRET, CLIENT_ID_GITHUB, CLIENT_SECRET_GITHUB, RESEND_API_KEY
 # pull_request_target = workflow runs in base repo so fork PRs get access to secrets
 name: Tests
