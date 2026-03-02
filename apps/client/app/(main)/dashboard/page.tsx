@@ -77,7 +77,10 @@ export default function DashboardPage() {
       setUrl("");
       setName("");
       setIsCreating(false);
-      await utils.website.list.invalidate();
+      await Promise.all([
+        utils.website.list.invalidate(),
+        utils.website.status.invalidate(),
+      ]);
     },
     onError: (err) => {
       toast.error("Couldn’t add monitor", {
